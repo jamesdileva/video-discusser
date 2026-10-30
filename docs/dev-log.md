@@ -111,3 +111,62 @@ perf counter; real-video frame quality; `num_ctx` 8192 behavior under load;
 **Deviation note:** inference default port becomes Ollama's `11434` (not the
 architecture doc's `8081` example). Intent (separate configurable ports) preserved;
 architecture.md to be updated when the Sprint 9 adapter lands.
+
+## 2026-10-30 — Sprint 2: Project skeleton and configuration
+
+**Goal:** Small, testable FastAPI application with configuration centralized.
+
+**Plan & scope:** app package per architecture.md §5; pinned dependencies;
+validated settings with hard bounds; `GET /api/health`; static dashboard shell;
+request-ID + structured logging foundations; initial test suite. Deferred:
+sync/status routes (Sprint 3), request-ID *in every log line* for jobs (arrives
+with orchestration), environment check script (Sprint 6).
+
+**What was done:**
+
+- Python 3.14 compatibility confirmed: FastAPI 0.162.0, Pydantic 2.14.2,
+  uvicorn 0.54.0, httpx 0.28.1, pytest 9.2.0 all install and run clean on 3.14.3.
+- `pyproject.toml` — exact-pinned runtime + dev deps, pytest config.
+- `app/config.py` — `Settings` (pydantic-settings, `.env` loading) with hard
+  bounds on every budget, loopback enforcement for `APP_HOST` and the inference
+  URL, port-collision rejection, empty-model rejection, and an actionable
+  `ensure_cache_dir()` startup check.
+- `app/main.py` — app factory (`create_app(settings)` for test injection),
+  lifespan that validates/creates the cache dir and logs a redacted startup
+  summary, request-ID middleware (context var + `X-Request-ID` header), logging
+  setup (request line only at DEBUG).
+- `app/api/health.py` + `app/schemas/status.py` — health contract; status
+  schema defined for Sprint 3.
+- `app/static/` — minimal dashboard shell that polls `/api/health` and renders
+  with `textContent` only.
+- `tests/` — 24 tests: health contract, request-ID echo/assignment, dashboard
+  serving, config defaults, loopback/port/bounds rejection matrix, cache-dir
+  behavior. All settings fixtures isolated from the local `.env`.
+
+**Verification (roadmap Sprint 2 checklist):**
+
+- [x] `GET /api/health` returns 200 and version (live curl: `{"status":"ok","version":"0.1.0"}`)
+- [x] Invalid configuration fails with a clear message (`APP_HOST=0.0.0.0` →
+  "must be a loopback address…"; port collision → "must differ from APP_PORT")
+- [x] Backend listens on `127.0.0.1:8000` (live uvicorn run)
+- [x] Runtime URL defaults to a different port (11434), collision rejected
+- [x] `pytest` runs without GPU or network (24 passed, 0.18s)
+- [x] Logs do not include user questions or full URLs by default (app logger
+  emits lifecycle INFO + DEBUG request lines only; API design keeps sensitive
+  payloads in POST bodies. Note: uvicorn's own access log prints request paths
+  — acceptable because paths carry only opaque IDs by design.)
+
+**Files changed:** `pyproject.toml`; `app/` package (`__init__`, `config`,
+`main`, `api/health`, `schemas/status`, `static/` shell); `tests/` (`conftest`,
+`test_health`, `test_config`); `README.md` status; `docs/dev-log.md` (this entry).
+
+**Tests run:** `pytest` — 24 passed. Live: health curl, dashboard curl,
+bad-config startups (2 rejection cases).
+
+**Unverified / deferred:** `X-Request-ID` correlation across multi-stage jobs
+(Sprint 10+); settings hot-reload (not planned); `scripts/check_environment.py`
+(Sprint 6).
+
+**Environment note:** deprecation warning observed — starlette's TestClient
+hints that `httpx` is deprecated in favor of `httpx2` upstream. No action now;
+revisit when the inference adapter (Sprint 9) picks its HTTP client.

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-discusser"
+version = "0.1.0"
+description = "Local-first tool for discussing video evidence and events with a local vision-language model."
+readme = "README.md"
+requires-python = ">=3.14"
+license = { text = "Proprietary" }
+authors = [{ name = "jamesdileva" }]
+dependencies = [
+    "fastapi==0.162.0",
+    "uvicorn[standard]==0.54.0",
+    "pydantic==2.14.2",
+    "pydantic-settings==2.16.2",
+    "httpx==0.28.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+]
+
+[tool.setuptools]
+packages = ["app", "app.api", "app.schemas"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
