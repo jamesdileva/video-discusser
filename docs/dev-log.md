@@ -59,3 +59,55 @@ replacement of useful work.
 **Open item for Sprint 1:** AMD GPU means the runtime feasibility spike must
 validate llama.cpp **Vulkan** (RX 6400 is RDNA2; ROCm on Windows is not a practical
 option for this card) or CPU inference as fallback.
+
+## 2026-10-30 — Sprint 1: Hardware and runtime feasibility spike
+
+**Goal:** Prove a small local vision model accepts image input on the target
+machine before building around it.
+
+**Plan & scope:** validate a Windows-friendly runtime + small VLM on the RX 6400
+(4 GB, AMD — no CUDA); single-image and multi-image tests with deterministic
+ground-truth frames; measure latency/token cost; record decision. Deferred:
+real-video quality evaluation (Sprint 11), context/KV tuning (Sprint 9).
+
+**What was done:**
+
+- Discovered existing local runtime: Ollama 0.40.11 with 19 models including a VLM
+  (`qwen2.5vl:3b`) — avoided a multi-GB download entirely.
+- Confirmed RX 6400 is not ROCm-supported (`gfx1034`) but Ollama's Vulkan backend
+  runs it; server logs show the CLIP vision encoder on the Vulkan GPU device.
+- Built deterministic ground-truth test frames (`scripts/make_test_image.ps1`,
+  variant A: "HELLO 42"/red circle/green rectangle; variant B: "SECOND 77"/orange
+  circle/purple rectangle) and a reproducible correctness gate
+  (`scripts/vlm_smoke_test.py`, stdlib-only) plus a timing probe
+  (`scripts/vlm_timing_probe.py`).
+- Benchmarked two candidate models with uncached vision encoding.
+
+**Results (see `docs/runtime-feasibility.md` for full numbers):**
+
+- `qwen2.5vl:3b`: image input + ordering correct, but ~1060 vision tokens/image and
+  20–40 s encode per image → ~6 min for a 12-frame request. Too slow for live use.
+- **`qwen3.5:4b` (chosen): ~327 tokens/image, ~2.4 s encode/image, 2-image ordering
+  correct, 75% GPU. 12-frame request extrapolates to ~30–45 s.** Follow-ups on
+  cached frames are seconds.
+- Notable finding: `think:false` made the model skip one of three answer parts
+  (fast but lossy); the correctness gate runs with thinking on.
+
+**Verification (roadmap Sprint 1 checklist):** all six boxes pass — see
+`docs/runtime-feasibility.md`. Smoke tests: single PASS, multi PASS.
+
+**Files changed:** `scripts/make_test_image.ps1`, `scripts/vlm_smoke_test.py`,
+`scripts/vlm_timing_probe.py` (new); `docs/runtime-feasibility.md` (new);
+`.env.example` (runtime URL/model updated to Sprint 1 decision);
+`docs/dev-log.md` (this entry).
+
+**Tests run:** `vlm_smoke_test.py` single (PASS) and multi (PASS) on both models;
+timing probes ×5; text-only prompt-eval isolation probe.
+
+**Unverified / deferred:** peak-VRAM measured indirectly (GPU split %), not with a
+perf counter; real-video frame quality; `num_ctx` 8192 behavior under load;
+`qwen3-vl:2b` comparison. All assigned to Sprints 9/11.
+
+**Deviation note:** inference default port becomes Ollama's `11434` (not the
+architecture doc's `8081` example). Intent (separate configurable ports) preserved;
+architecture.md to be updated when the Sprint 9 adapter lands.

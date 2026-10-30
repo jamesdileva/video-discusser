@@ -19,8 +19,8 @@ sync state, the evidence the model was given, and the conversation.
 |---|---|
 | Architecture, roadmap, implementation guide | Backend (Sprint 2+) |
 | Environment baseline (Sprint 0) | Browser sync (Sprint 5) |
-| | Frame extraction (Sprint 7) |
-| | Local model inference (Sprints 1, 9–11) |
+| **Runtime feasibility: local VLM proven on the 4 GB AMD GPU (Sprint 1)** | Frame extraction (Sprint 7) |
+| — Ollama + `qwen3.5:4b`, image input & multi-image ordering verified | Local model integration (Sprints 9–11) |
 
 ## Requirements
 
