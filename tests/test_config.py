@@ -92,6 +92,21 @@ def test_local_media_dirs_semicolon_parsing() -> None:
     assert [str(p) for p in s.local_media_dirs] == [r"C:\Videos", r"D:\Clips"]
 
 
+def test_local_media_dirs_parses_from_env_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: the env source must pass the raw string to the field
+    validator (NoDecode), not attempt JSON parsing. This path is distinct
+    from kwargs injection and broke before the NoDecode annotation."""
+    monkeypatch.setenv("LOCAL_MEDIA_DIRS", r"C:\Videos;D:\Clips")
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert [str(p) for p in s.local_media_dirs] == [r"C:\Videos", r"D:\Clips"]
+
+
+def test_local_media_dirs_empty_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOCAL_MEDIA_DIRS", "")
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert s.local_media_dirs == []
+
+
 def test_local_media_dirs_empty_and_defaults() -> None:
     assert Settings(local_media_dirs="", _env_file=None).local_media_dirs == []  # type: ignore[call-arg]
     assert Settings(local_media_dirs=None, _env_file=None).local_media_dirs == []  # type: ignore[call-arg]

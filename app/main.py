@@ -12,6 +12,7 @@ Boundaries established here:
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -28,6 +29,7 @@ from app.adapters.media_source import MediaSourceRegistry
 from app.adapters.youtube_source import YouTubeSource
 from app.api import health, status
 from app.api import sync as sync_api
+from app.api import evidence as evidence_api
 from app.api import frames as frames_api
 from app.api.errors import install_error_handlers
 from app.config import Settings, get_settings
@@ -78,6 +80,17 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class NoCacheStaticFiles(StaticFiles):
+    """Static assets revalidate on every load. A local app updates with the
+    running backend; a cached stale `app.js` against fresh HTML produces
+    exactly the broken-UI confusion this prevents."""
+
+    def file_response(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the application. `settings` is injectable for tests; production
     uses the cached `get_settings()`."""
@@ -116,18 +129,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sync_api.router)
     app.include_router(status.router)
     app.include_router(frames_api.router)
+    app.include_router(evidence_api.router)
     install_error_handlers(app)
     app.state.active_video = ActiveVideoService()
     app.state.media_sources = MediaSourceRegistry(
         [LocalFileSource(settings), YouTubeSource(settings)]
     )
     app.state.frame_store = frame_store
+    app.state.settings = settings
+    app.state.evidence_lock = threading.Lock()
 
     if settings.app_env == "development":
         _install_dev_fixture_routes(app)
 
     static_dir = Path(__file__).parent / "static"
-    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+    app.mount("/", NoCacheStaticFiles(directory=static_dir, html=True), name="static")
     return app
 
 

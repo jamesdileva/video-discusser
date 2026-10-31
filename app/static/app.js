@@ -21,6 +21,9 @@
     "svc-backend", "svc-inference", "svc-media",
     "video-empty", "video-details",
     "video-id", "video-ts", "video-updated", "video-source", "video-revision",
+    "local-path-input", "local-sync-button", "local-sync-status",
+    "window-select", "preview-button", "preview-stage", "preview-window",
+    "frames-strip", "preview-stale", "preview-warning",
     "chat-log", "chat-form", "question-input", "ask-button",
   ].forEach(function (id) {
     els[id] = document.getElementById(id);
@@ -31,6 +34,9 @@
   let lastKnownStatus = null; // body of the last successful /api/status
   let lastOkAt = null;        // Date of the last successful poll
   let chatStarted = false;    // has the user sent at least one question
+  let previewInFlight = false;
+  let localSyncInFlight = false;
+  let lastPreview = null;     // last EvidencePreviewResponse rendered
 
   // --- helpers ---------------------------------------------------------------
 
@@ -43,11 +49,15 @@
   }
 
   function formatTimestamp(seconds) {
-    const total = Math.floor(seconds);
+    // Format from the decimal string: (9.7 - 9) * 10 is 6.999… in floats,
+    // which floors to 6 — the classic off-by-one-tenth label bug.
+    if (!Number.isFinite(seconds) || seconds < 0) return "?";
+    const fixed = seconds.toFixed(1);
+    const total = Math.floor(Number(fixed));
+    const tenths = fixed.split(".")[1] || "0";
     const h = Math.floor(total / 3600);
     const m = Math.floor((total % 3600) / 60);
     const s = total % 60;
-    const tenths = Math.floor((seconds - total) * 10);
     const mmss = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
     return (h > 0 ? h + ":" : "") + mmss + "." + tenths;
   }
@@ -87,6 +97,8 @@
       setHidden(els["video-empty"], false);
       setHidden(els["video-details"], true);
       setChatEnabled(false);
+      setPreviewEnabled(false);
+      markPreviewStaleForState(null);
       return;
     }
     setHidden(els["video-empty"], true);
@@ -97,6 +109,8 @@
     setText(els["video-source"], state.sync_source === "manual" ? "manual" : "pause event");
     setText(els["video-revision"], "#" + state.revision);
     setChatEnabled(true);
+    setPreviewEnabled(true);
+    markPreviewStaleForState(state);
   }
 
   function renderStatus(body) {
@@ -121,6 +135,159 @@
     if (!els["question-input"] || !els["ask-button"]) return;
     els["question-input"].disabled = !enabled;
     els["ask-button"].disabled = !enabled;
+  }
+
+  // --- evidence preview -------------------------------------------------------
+
+  function setPreviewEnabled(enabled) {
+    if (!els["preview-button"]) return;
+    // Never enable on top of an in-flight request or a missing video.
+    els["preview-button"].disabled = !enabled || previewInFlight;
+  }
+
+  function setPreviewStage(text, isError) {
+    setText(els["preview-stage"], text);
+    els["preview-stage"].classList.toggle("preview-error", Boolean(isError));
+  }
+
+  function renderFrames(preview) {
+    const strip = els["frames-strip"];
+    if (!strip) return;
+    // Replace children wholesale (textContent + element attributes only).
+    strip.replaceChildren();
+    preview.frames.forEach(function (frame) {
+      const figure = document.createElement("figure");
+      const img = document.createElement("img");
+      img.src = frame.preview_url; // same-origin, generated ID path
+      img.alt = "Frame at " + formatTimestamp(frame.timestamp_seconds);
+      img.width = 130;
+      img.loading = "lazy";
+      const caption = document.createElement("figcaption");
+      if (preview.source === "youtube") {
+        const link = document.createElement("a");
+        link.href =
+          "https://www.youtube.com/watch?v=" +
+          encodeURIComponent(preview.video_id) +
+          "&t=" +
+          Math.floor(frame.timestamp_seconds) +
+          "s";
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        setText(link, formatTimestamp(frame.timestamp_seconds));
+        caption.appendChild(link);
+      } else {
+        setText(caption, formatTimestamp(frame.timestamp_seconds));
+      }
+      figure.appendChild(img);
+      figure.appendChild(caption);
+      strip.appendChild(figure);
+    });
+    setHidden(els["preview-window"], false);
+    setText(
+      els["preview-window"],
+      "Analysis window: " +
+        formatTimestamp(preview.window.start_seconds) +
+        " → " +
+        formatTimestamp(preview.window.end_seconds) +
+        " (" + preview.frames.length + " frame" + (preview.frames.length === 1 ? "" : "s") +
+        ", snapshot #" + preview.snapshot_revision + ")"
+    );
+    if (preview.warnings && preview.warnings.length > 0) {
+      setHidden(els["preview-warning"], false);
+      setText(els["preview-warning"], "Warnings: " + preview.warnings.join(" | "));
+    } else {
+      setHidden(els["preview-warning"], true);
+    }
+  }
+
+  function markPreviewStaleForState(state) {
+    if (!els["preview-stale"]) return;
+    if (!lastPreview) {
+      setHidden(els["preview-stale"], true);
+      return;
+    }
+    const changed =
+      !state || state.revision !== lastPreview.snapshot_revision;
+    if (changed) {
+      setHidden(els["preview-stale"], false);
+      setText(
+        els["preview-stale"],
+        "This preview belongs to an earlier snapshot (#" +
+          lastPreview.snapshot_revision +
+          ") — the active video has changed."
+      );
+    } else {
+      setHidden(els["preview-stale"], true);
+    }
+  }
+
+  async function runPreview() {
+    if (previewInFlight) return; // duplicate submit guard
+    previewInFlight = true;
+    setPreviewEnabled(false);
+    setHidden(els["preview-stale"], true);
+    setPreviewStage("Resolving source and extracting frames…", false);
+    try {
+      const resp = await fetch("/api/evidence/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ window_seconds: Number(els["window-select"].value) }),
+      });
+      const body = await resp.json();
+      if (!resp.ok) {
+        const code = body && body.error ? body.error.code : "HTTP " + resp.status;
+        const message = body && body.error ? body.error.message : "";
+        setPreviewStage("Preview failed — " + code + ". " + message, true);
+        return;
+      }
+      lastPreview = body;
+      renderFrames(body);
+      markPreviewStaleForState(
+        lastKnownStatus ? lastKnownStatus.active_video : null
+      );
+      setPreviewStage("Done — frames below are exactly what the model would receive.", false);
+    } catch (err) {
+      setPreviewStage("Preview failed — backend unreachable.", true);
+    } finally {
+      previewInFlight = false;
+      const hasVideo = Boolean(lastKnownStatus && lastKnownStatus.active_video);
+      setPreviewEnabled(hasVideo);
+    }
+  }
+
+  // --- local-file sync ----------------------------------------------------------
+
+  async function syncLocalFile() {
+    if (localSyncInFlight) return;
+    const path = els["local-path-input"].value.trim();
+    if (!path) {
+      setText(els["local-sync-status"], "Enter a video path first.");
+      return;
+    }
+    localSyncInFlight = true;
+    setText(els["local-sync-status"], "Syncing…");
+    try {
+      const resp = await fetch("/api/sync/local-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ path: path }),
+      });
+      const body = await resp.json();
+      if (!resp.ok) {
+        const code = body && body.error ? body.error.code : "HTTP " + resp.status;
+        const message = body && body.error ? body.error.message : "";
+        setText(els["local-sync-status"], "Failed — " + code + ". " + message);
+        return;
+      }
+      setText(
+        els["local-sync-status"],
+        "Synced as " + body.active_video.video_id + " (revision #" + body.revision + ")"
+      );
+    } catch (err) {
+      setText(els["local-sync-status"], "Failed — backend unreachable.");
+    } finally {
+      localSyncInFlight = false;
+    }
   }
 
   // --- chat shell (local only until the discussion sprint) ---------------------
@@ -207,6 +374,22 @@
 
   function init() {
     if (els["chat-form"]) els["chat-form"].addEventListener("submit", onChatSubmit);
+    if (els["preview-button"]) {
+      els["preview-button"].addEventListener("click", function () {
+        runPreview();
+      });
+    }
+    if (els["local-sync-button"]) {
+      els["local-sync-button"].addEventListener("click", function () {
+        syncLocalFile();
+      });
+      els["local-path-input"].addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          syncLocalFile();
+        }
+      });
+    }
     document.addEventListener("visibilitychange", onVisibilityChange);
     loadVersionOnce();
     poll();

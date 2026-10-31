@@ -13,6 +13,9 @@ EXPECTED_ELEMENT_IDS = [
     "svc-backend", "svc-inference", "svc-media",
     "video-empty", "video-details",
     "video-id", "video-ts", "video-updated", "video-source", "video-revision",
+    "local-path-input", "local-sync-button", "local-sync-status",
+    "window-select", "preview-button", "preview-stage", "preview-window",
+    "frames-strip", "preview-stale", "preview-warning",
     "chat-log", "chat-form", "question-input", "ask-button",
 ]
 
@@ -35,6 +38,28 @@ def test_dashboard_question_input_starts_disabled(client: TestClient) -> None:
     # The input renders disabled and is enabled by JS only once a video exists.
     assert 'id="question-input" type="text" maxlength="2000"' in html
     assert "disabled>" in html
+
+
+def test_window_selector_is_bounded(client: TestClient) -> None:
+    """The selector may only offer windows at or below the server default cap
+    (180 s) so the UI never promises what the server would clamp away."""
+    html = client.get("/").text
+    import re
+
+    options = re.findall(r'<option value="(\d+)"', html)
+    assert options, "window selector has no options"
+    assert all(int(value) <= 180 for value in options)
+
+
+def test_app_js_wires_evidence_preview(client: TestClient) -> None:
+    js = client.get("/app.js").text
+    assert "/api/evidence/preview" in js
+    assert "/api/sync/local-file" in js
+    assert "previewInFlight" in js  # duplicate-submit guard
+    assert "markPreviewStaleForState" in js  # changed-video marker
+    # the sampling-gap explanation lives in the served HTML
+    html = client.get("/").text
+    assert "miss events between them" in html
 
 
 def test_app_js_uses_textcontent_only(client: TestClient) -> None:

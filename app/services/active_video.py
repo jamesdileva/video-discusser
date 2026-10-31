@@ -36,21 +36,26 @@ class ActiveVideoService:
         timestamp_seconds: float,
         video_id: str,
         sync_source: SyncSource,
+        source: str = "youtube",
+        title: str | None = None,
     ) -> ActiveVideoState:
         """Accept a sync as the newest truth. Every accepted sync increments
         the revision, so an out-of-order (stale) sync can never silently
         overwrite newer state — the revision always moves forward and the
         change is observable."""
+        if source not in ("youtube", "local_file"):
+            raise ValueError(f"unsupported video source: {source!r}")
         with self._lock:
             next_revision = (self._state.revision + 1) if self._state else 1
             state = ActiveVideoState(
                 video_id=video_id,
                 url=url,
-                source="youtube",  # local_file sync arrives with Sprint 6
+                source=source,  # type: ignore[arg-type]  # validated above
                 timestamp_seconds=timestamp_seconds,
                 updated_at=datetime.now(timezone.utc),
                 sync_source=sync_source,
                 revision=next_revision,
+                title=title,
             )
             self._state = state
             return state

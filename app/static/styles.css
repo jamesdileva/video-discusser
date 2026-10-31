@@ -165,6 +165,106 @@ h2 {
 
 #ask-button:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* --- Evidence preview ------------------------------------------------------ */
+
+.preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.preview-controls label { color: var(--muted); font-size: 0.85rem; }
+
+#window-select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+}
+
+#preview-button {
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: #10131c;
+  font: 600 0.85rem "Segoe UI", sans-serif;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+}
+
+#preview-button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.frames-strip {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.frames-strip:empty { display: none; }
+
+.frames-strip figure {
+  margin: 0;
+  width: 132px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.frames-strip img {
+  display: block;
+  width: 130px;
+  height: auto;
+  background: #000;
+}
+
+.frames-strip figcaption {
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding: 0.25rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.frames-strip figcaption a { color: var(--accent); text-decoration: none; }
+.frames-strip figcaption a:hover { text-decoration: underline; }
+
+.stale-note {
+  color: var(--warn);
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
+}
+
+.preview-error { color: var(--bad); }
+
+/* --- Local-file sync row ------------------------------------------------------ */
+
+.local-sync { margin-top: 0.75rem; display: grid; gap: 0.35rem; }
+
+.local-sync input {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  font: inherit;
+}
+
+#local-sync-button {
+  justify-self: start;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font: 600 0.8rem "Segoe UI", sans-serif;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
 /* --- Utilities ------------------------------------------------------------- */
 
 .hidden { display: none !important; }

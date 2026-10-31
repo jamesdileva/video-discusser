@@ -61,3 +61,19 @@ class SyncAcceptedResponse(BaseModel):
 
     revision: int
     active_video: ActiveVideoState
+
+
+class LocalFileSyncPayload(BaseModel):
+    """`POST /api/sync/local-file` — a path typed by the local user. It is
+    only honored inside the configured `LOCAL_MEDIA_DIRS` allowlist."""
+
+    path: str = Field(min_length=1, max_length=1024)
+    timestamp_seconds: float = Field(default=0.0, ge=0, allow_inf_nan=False)
+
+    @field_validator("path")
+    @classmethod
+    def _reject_blank_path(cls, value: str) -> str:
+        value = value.strip().strip('"')
+        if not value:
+            raise ValueError("path must not be blank")
+        return value

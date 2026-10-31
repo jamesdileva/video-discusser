@@ -90,12 +90,15 @@
     }
 
     function formatTimestamp(seconds) {
+      // Format from the decimal string — see the dashboard twin of this
+      // function for why (floating-point tenths flooring bug).
       if (!Number.isFinite(seconds) || seconds < 0) return "?";
-      const total = Math.floor(seconds);
+      const fixed = seconds.toFixed(1);
+      const total = Math.floor(Number(fixed));
+      const tenths = fixed.split(".")[1] || "0";
       const h = Math.floor(total / 3600);
       const m = Math.floor((total % 3600) / 60);
       const s = total % 60;
-      const tenths = Math.floor((seconds - total) * 10);
       const mmss = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
       return (h > 0 ? h + ":" : "") + mmss + "." + tenths;
     }

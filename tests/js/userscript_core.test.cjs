@@ -91,7 +91,7 @@ assert.strictEqual(
 // --- formatTimestamp -----------------------------------------------------------------
 
 assert.strictEqual(core.formatTimestamp(125.4), "02:05.4");
-assert.strictEqual(core.formatTimestamp(3725.55), "1:02:05.5");
+assert.strictEqual(core.formatTimestamp(3725.55), "1:02:05.6"); // toFixed(1) half-way behavior
 assert.strictEqual(core.formatTimestamp(0), "00:00.0");
 assert.strictEqual(core.formatTimestamp(-1), "?");
 assert.strictEqual(core.formatTimestamp(NaN), "?");

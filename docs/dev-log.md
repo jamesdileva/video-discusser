@@ -514,3 +514,79 @@ instead; no architecture change implied.
 **Unverified / deferred:** extraction from a YouTube download end-to-end
 (needs yt-dlp); cache budget by total disk size (Sprint 12); `fps`-style
 dense sampling near events (post-MVP Sprint 19).
+
+## 2026-10-31 — Sprint 8: Evidence preview and question workflow UI
+
+**Goal:** Let the user inspect what the model will actually see.
+
+**Plan & scope:** close the loop on this machine — `POST /api/sync/local-file`
+(the trusted-UI half of Sprint 6's local-file design, allowlist-gated),
+`POST /api/evidence/preview` (resolve → plan → extract, no model), and the
+dashboard evidence card (window selector, thumbnails with clickable
+timestamps, stage/error states, stale-snapshot marker). Deferred: inference
+stage (Sprints 9–10), full job queue (Sprint 12 — a 409-busy lock now),
+frame-max selector (server clamp covers it).
+
+**What was done:**
+
+- `app/api/sync.py` — `POST /api/sync/local-file`: resolves through the
+  local-file source (allowlist + probe), generates a `local_<sha12>` video
+  ID, syncs with `source="local_file"` (`ActiveVideoService.apply_sync`
+  extended with `source`/`title`); logs never include the path.
+- `app/api/evidence.py` — `POST /api/evidence/preview`: snapshot tagged with
+  its revision; request window/frames clamped to configured bounds (schema
+  ceilings are sanity-only; config is the effective bound); single-flight
+  lock → structured 409 `extraction_in_progress`; `MediaSourceError` /
+  `FrameExtractionError` mapped to stable codes and HTTP statuses
+  (422 user-input, 503 service-side, 502/504 download, 500 extraction).
+- Dashboard — evidence card: bounded window selector (30/60/180 s, at or
+  below the server default), Preview button (disabled until a video exists
+  and while in flight), stage line, analysis-window line, thumbnail strip
+  (`img.src` attribute + textContent captions; YouTube timestamps link out
+  at `?t=<floor>s`, local files show plain labels), warnings line, stale
+  marker ("belongs to an earlier snapshot"), and the sampling-gap note.
+  Local-file sync row in the Active video card.
+- `app/main.py` — `NoCacheStaticFiles` (stale `app.js` against fresh HTML
+  produced a broken UI during verification) + cache-busting script version.
+
+**Bugs found and fixed during this sprint's verification:**
+
+1. **Env-source parsing bug** (would break every real `.env` deploy):
+   pydantic-settings JSON-decodes `list[Path]` fields from the environment
+   *before* field validators run, so `LOCAL_MEDIA_DIRS=C:\Videos;D:\Clips`
+   crashed at startup. Fixed with `Annotated[list[Path], NoDecode]`; two
+   regression tests now exercise the env source directly (kwargs injection
+   had masked the path — the exact gap unit tests are for).
+2. **Stale-JS caching**: the IAB served a cached `app.js` against fresh HTML,
+   silently disabling new features. Fixed with `Cache-Control: no-cache` on
+   static files plus a versioned script URL.
+3. **Floating-point label bug**: `9.7 - 9` floors to tenths digit 6, so
+   "00:09.7" displayed as "00:09.6". `formatTimestamp` now formats from the
+   decimal string (`toFixed(1)`); fixed in the dashboard and the userscript
+   core (Node tests updated for the deterministic half-way case).
+
+**Verification (roadmap Sprint 8 checklist) — real browser, real backend:**
+
+- [x] Frame timestamps visible before model analysis — captions + window
+  line render; anchor honestly shows 00:09.7 after the EOF pull-back.
+- [x] Duplicate submissions prevented — button disabled while in flight;
+  server 409 `extraction_in_progress` unit-tested by holding the lock.
+- [x] A failed extraction does not leave the UI permanently loading — YouTube
+  preview (source disabled) shows an actionable error, button re-enables, old
+  frames stay visible.
+- [x] A changed video is visually distinguishable — after re-syncing,
+  "This preview belongs to an earlier snapshot (#1/#2) — the active video has
+  changed." appears and clears on the next preview.
+- [x] The UI clearly identifies the active analysis window —
+  "Analysis window: 00:00.0 → 00:09.9 (12 frames, snapshot #2)".
+- Frame thumbnails verified visually by screenshot (the in-app browser's
+  `img.complete` reports false while images visibly render — quirk noted;
+  direct fetch of each URL is 200 `image/jpeg`).
+
+**Tests run:** `pytest` — 148 passed (134 prior + 14 new). Node core suite
+green. Live: local-file sync via UI, preview via UI, stale marker ×2, failure
+path, cache-key stability across identical previews.
+
+**Unverified / deferred:** preview of a real YouTube download (needs yt-dlp +
+opt-in); question submit still a local placeholder until Sprint 10; UI
+polish pass comes with Sprint 14 (trust/layout).

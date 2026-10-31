@@ -23,7 +23,8 @@ sync state, the evidence the model was given, and the conversation.
 | **Sync API, race-aware active-video state, status endpoint (Sprint 3)** | Reliability, hardening & MVP release (Sprints 12–17) |
 | **Live dashboard: status polling, service indicators, chat shell (Sprint 4)** | |
 | **YouTube pause-sync userscript + dev test harness (Sprint 5)** | |
-| **Media adapters + frame extraction & bounded sampling (Sprints 6–7)** | |
+| **Media adapters + frame extraction & bounded sampling (Sprints 6–7)** | Inference adapter & discussion (Sprints 9–10) |
+| **Evidence preview UI: local-file sync, thumbnails, window selector (Sprint 8)** | Real-model evaluation (Sprint 11) |
 
 ## Requirements
 

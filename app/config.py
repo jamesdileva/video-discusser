@@ -15,7 +15,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from typing import Annotated
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -59,7 +60,9 @@ class Settings(BaseSettings):
     # read from. Browser-supplied paths are only honored inside these roots;
     # the roots themselves come from trusted local configuration. Empty list
     # disables local-file mode.
-    local_media_dirs: list[Path] = Field(default_factory=list)
+    # NoDecode: the env value is a raw `DIR1;DIR2` string (not JSON) and is
+    # split by the field validator below.
+    local_media_dirs: Annotated[list[Path], NoDecode] = Field(default_factory=list)
     # Optional YouTube source via yt-dlp. Off by default; downloading must
     # comply with platform terms and applicable law (no DRM circumvention).
     youtube_source_enabled: bool = False

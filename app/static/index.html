@@ -42,7 +42,7 @@
       <h2 id="video-h">Active video</h2>
       <div id="video-empty" class="empty">
         No video synced yet. Open a YouTube video in your browser and pause it —
-        the sync helper will post it here.
+        the sync helper will post it here. Or sync a local video:
       </div>
       <dl id="video-details" class="kv hidden">
         <dt>Video ID</dt>
@@ -56,6 +56,34 @@
         <dt>Revision</dt>
         <dd id="video-revision">—</dd>
       </dl>
+      <div class="local-sync">
+        <input id="local-path-input" type="text" maxlength="1024"
+               placeholder="Path to a local video (must be under LOCAL_MEDIA_DIRS)">
+        <button id="local-sync-button" type="button">Sync local file</button>
+        <p id="local-sync-status" class="meta" role="status"></p>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="preview-h">
+      <h2 id="preview-h">Evidence preview</h2>
+      <div class="preview-controls">
+        <label for="window-select">Window</label>
+        <select id="window-select">
+          <option value="30">Last 30 s</option>
+          <option value="60">Last 60 s</option>
+          <option value="180" selected>Last 3 min</option>
+        </select>
+        <button id="preview-button" type="button" disabled>Preview frames</button>
+      </div>
+      <p id="preview-stage" class="meta" role="status">
+        Sync a video to preview the evidence the model would receive.
+      </p>
+      <p id="preview-window" class="meta hidden"></p>
+      <div id="frames-strip" class="frames-strip" aria-live="polite"></div>
+      <p id="preview-stale" class="stale-note hidden"></p>
+      <p id="preview-warning" class="meta hidden"></p>
+      <p class="meta">Sampled still frames can miss events between them and
+      contain no audio. Model analysis arrives in a later sprint.</p>
     </section>
 
     <section class="card" aria-labelledby="chat-h">
@@ -74,6 +102,8 @@
       answers arrive in a later sprint.</p>
     </section>
   </main>
-  <script src="app.js"></script>
+  <!-- Version query busts aggressive caches; the backend also sends
+       Cache-Control: no-cache (see NoCacheStaticFiles). -->
+  <script src="app.js?v=8b"></script>
 </body>
 </html>
