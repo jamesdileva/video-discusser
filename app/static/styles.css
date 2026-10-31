@@ -2,11 +2,14 @@
   color-scheme: dark;
   --bg: #14161c;
   --card: #1d2029;
+  --border: #2a2e3a;
   --text: #e6e8ee;
   --muted: #9aa1b2;
   --ok: #4cc38a;
   --bad: #e5484d;
-  --pending: #d4a72c;
+  --warn: #d4a72c;
+  --idle: #6b7280;
+  --accent: #7aa2f7;
 }
 
 * { box-sizing: border-box; }
@@ -16,30 +19,157 @@ body {
   font-family: "Segoe UI", system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
 }
 
 .shell {
-  max-width: 720px;
+  max-width: 760px;
   margin: 0 auto;
-  padding: 2rem 1rem;
+  padding: 2rem 1rem 4rem;
   display: grid;
   gap: 1rem;
 }
 
 h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
-h2 { font-size: 1rem; margin: 0 0 0.5rem; color: var(--muted); font-weight: 600; }
+h2 {
+  font-size: 0.95rem;
+  margin: 0 0 0.6rem;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 
-.notice { color: var(--pending); font-size: 0.85rem; margin: 0; }
+.notice { color: var(--warn); font-size: 0.85rem; margin: 0; }
+
+.banner {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(229, 72, 77, 0.12);
+  border: 1px solid rgba(229, 72, 77, 0.45);
+  color: var(--bad);
+  font-size: 0.9rem;
+}
 
 .card {
   background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1rem 1.25rem;
 }
 
-.state { font-size: 1.1rem; margin: 0; font-weight: 600; }
-.state-ok { color: var(--ok); }
-.state-bad { color: var(--bad); }
-.state-pending { color: var(--pending); }
+/* --- Services ------------------------------------------------------------ */
 
-.meta { color: var(--muted); font-size: 0.85rem; margin: 0.25rem 0 0; }
+.services {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.services li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--idle);
+  flex: none;
+}
+
+.dot-ok { background: var(--ok); }
+.dot-unavailable { background: var(--bad); }
+.dot-not_configured { background: var(--warn); }
+.dot-unknown { background: var(--idle); }
+.dot-pending { background: var(--warn); opacity: 0.6; }
+
+.svc-state { color: var(--muted); font-size: 0.85rem; }
+
+/* --- Key/value video details --------------------------------------------- */
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1.25rem;
+  margin: 0;
+}
+
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.empty { color: var(--muted); }
+
+.meta { color: var(--muted); font-size: 0.82rem; margin: 0.6rem 0 0; }
+
+/* --- Discussion ------------------------------------------------------------ */
+
+.chat-log {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-height: 96px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9rem;
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+}
+
+.chat-msg { overflow-wrap: anywhere; }
+.chat-msg .who { color: var(--accent); font-weight: 600; }
+.chat-msg.system .who { color: var(--warn); }
+.chat-msg.system { color: var(--muted); }
+
+#chat-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+#question-input {
+  flex: 1;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  font: inherit;
+}
+
+#question-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+#question-input:disabled { opacity: 0.5; }
+
+#ask-button {
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: #10131c;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.55rem 1.1rem;
+  cursor: pointer;
+}
+
+#ask-button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* --- Utilities ------------------------------------------------------------- */
+
+.hidden { display: none !important; }
+
+@media (max-width: 540px) {
+  .kv { grid-template-columns: 1fr; }
+  .kv dt { margin-top: 0.3rem; }
+}

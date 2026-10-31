@@ -225,3 +225,65 @@ status before/after, invalid host, NaN timestamp, URL-leak log grep.
 
 **Unverified / deferred:** userscript round-trip (Sprint 5); `manual` sync
 endpoint variant; CORS/Origin hardening (Sprint 13).
+
+## 2026-10-30 — Sprint 4: Dashboard shell and service status
+
+**Goal:** First usable local dashboard before adding inference.
+
+**Plan & scope:** rewrite `app/static/{index.html,styles.css,app.js}` into a
+live status dashboard — `/api/status` polling (2.5 s, paused on hidden tabs),
+per-service indicators, active-video display, empty/offline/stale states,
+chat shell with disabled-until-synced input, textContent-only rendering.
+Deferred: model answers (Sprint 10), server-sent events (post-MVP), frame
+previews (Sprint 8), sessions persistence (Sprint 15).
+
+**What was done:**
+
+- `index.html` — services card (dots + labels + version), active-video card
+  with empty state and key/value details, discussion card with bounded chat
+  log and a form whose input starts disabled.
+- `app.js` — single-flight polling loop via `setTimeout` (no overlapping
+  requests), immediate poll on `visibilitychange`, offline banner that keeps
+  last-known values visibly stale ("last ok: HH:MM:SS"), service state → dot
+  class mapping, `m:ss.t` timestamp formatting, chat log capped at 50
+  messages. Every dynamic write goes through a `setText` helper using
+  `textContent`.
+- `styles.css` — dark theme, state-colored dots, responsive single-column
+  layout, disabled affordances.
+- `tests/test_dashboard.py` — served HTML contains all IDs the JS requires;
+  static guard that `app.js` contains no HTML-injection sink (`innerHTML`,
+  `outerHTML`, `insertAdjacentHTML`, `document.write`) and does contain the
+  visibility-pause wiring.
+
+**Verification (roadmap Sprint 4 checklist) — performed in a real browser
+(ZCode in-app browser, DOM snapshots + screenshots + evaluate):**
+
+- [x] Dashboard loads without JavaScript errors — all features functional
+  (rendering, polling cycle, chat submit, offline recovery after backend restart).
+- [x] No synced video displays a clear empty state (verified in browser).
+- [x] Posting a test sync updates the dashboard — curl `POST /api/sync`
+  appeared on the next poll (~2.5 s): video ID, `02:05.4 (125.4s)`, revision #1,
+  input/button enabled.
+- [x] Backend shutdown shows disconnected state — banner visible, backend dot
+  `unavailable`, last-known video details remain on screen as stale.
+- [x] User/model text is rendered as text, not HTML — hostile input
+  `<img src=x onerror=alert(1)>` displayed verbatim; `querySelectorAll("img")`
+  count in the chat log: 0.
+- [x] Layout usable at common desktop window sizes — screenshots at 1280×800
+  and 700×640; no overflow, readable, keyboard-focusable input.
+
+**Notes:**
+
+- The full-page screenshot mode of the test browser produced a tiling
+  artifact (2×2 duplication); plain viewport screenshots confirmed correct
+  rendering. Not a page bug (DOM state was verified independently).
+- Backend restart clears in-memory active-video state by design; the
+  dashboard correctly returned to the empty state. Persistence is a later,
+  opt-in sprint (roadmap Sprint 15).
+
+**Tests run:** `pytest` — 68 passed (64 prior + 4 new static contract tests);
+browser verification as above.
+
+**Unverified / deferred:** pause-on-hidden-tab behavior observed via
+`visibilitychange` wiring only (static test), not with a manually hidden tab;
+userscript round-trip (Sprint 5).

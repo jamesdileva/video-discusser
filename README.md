@@ -17,11 +17,12 @@ sync state, the evidence the model was given, and the conversation.
 
 | Working | Not yet |
 |---|---|
-| Architecture, roadmap, implementation guide | Browser sync (Sprint 5) |
+| Architecture, roadmap, implementation guide | Browser sync userscript (Sprint 5) |
 | Environment baseline (Sprint 0) | Frame extraction (Sprint 7) |
 | **Runtime feasibility: local VLM proven on the 4 GB AMD GPU (Sprint 1)** | Model integration (Sprints 9–11) |
 | **Backend skeleton: health endpoint, validated config, dashboard shell (Sprint 2)** | Discussion pipeline (Sprint 10) |
 | **Sync API, race-aware active-video state, status endpoint (Sprint 3)** | |
+| **Live dashboard: status polling, service indicators, chat shell (Sprint 4)** | |
 
 ## Requirements
 

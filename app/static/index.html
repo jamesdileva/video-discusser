@@ -11,18 +11,67 @@
     <header>
       <h1>Video Discusser</h1>
       <p class="notice">Commentary and research assistance only — not legal advice.</p>
+      <p id="conn-banner" class="banner hidden" role="status">
+        Disconnected — showing last known state
+      </p>
     </header>
 
-    <section class="card" aria-live="polite">
-      <h2>Backend</h2>
-      <p id="backend-status" class="state state-pending">Checking…</p>
-      <p id="backend-version" class="meta"></p>
+    <section class="card" aria-labelledby="services-h">
+      <h2 id="services-h">Services</h2>
+      <ul class="services">
+        <li>
+          <span id="dot-backend" class="dot dot-pending" aria-hidden="true"></span>
+          Backend
+          <span id="svc-backend" class="svc-state">checking…</span>
+        </li>
+        <li>
+          <span id="dot-inference" class="dot dot-pending" aria-hidden="true"></span>
+          Model runtime
+          <span id="svc-inference" class="svc-state">checking…</span>
+        </li>
+        <li>
+          <span id="dot-media" class="dot dot-pending" aria-hidden="true"></span>
+          Media tools
+          <span id="svc-media" class="svc-state">checking…</span>
+        </li>
+      </ul>
+      <p class="meta">Backend version: <span id="backend-version">—</span></p>
     </section>
 
-    <section class="card">
-      <h2>Discussion</h2>
-      <p class="meta">The dashboard arrives in Sprint 4. Sync, frames, and model
-      discussion are not wired up yet.</p>
+    <section class="card" aria-labelledby="video-h">
+      <h2 id="video-h">Active video</h2>
+      <div id="video-empty" class="empty">
+        No video synced yet. Open a YouTube video in your browser and pause it —
+        the sync helper will post it here.
+      </div>
+      <dl id="video-details" class="kv hidden">
+        <dt>Video ID</dt>
+        <dd id="video-id">—</dd>
+        <dt>Pause timestamp</dt>
+        <dd id="video-ts">—</dd>
+        <dt>Last sync</dt>
+        <dd id="video-updated">—</dd>
+        <dt>Sync source</dt>
+        <dd id="video-source">—</dd>
+        <dt>Revision</dt>
+        <dd id="video-revision">—</dd>
+      </dl>
+    </section>
+
+    <section class="card" aria-labelledby="chat-h">
+      <h2 id="chat-h">Discussion</h2>
+      <div id="chat-log" class="chat-log empty" aria-live="polite">
+        Questions about the paused moment will appear here.
+      </div>
+      <form id="chat-form" autocomplete="off">
+        <!-- maxlength mirrors the server's MAX_QUESTION_CHARS default; the
+             server remains the enforcement point. -->
+        <input id="question-input" type="text" maxlength="2000"
+               placeholder="Ask about the paused moment…" disabled>
+        <button id="ask-button" type="submit" disabled>Ask</button>
+      </form>
+      <p id="chat-hint" class="meta">Sync a video to enable questions. Model
+      answers arrive in a later sprint.</p>
     </section>
   </main>
   <script src="app.js"></script>
