@@ -22,8 +22,11 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app import __version__
-from app.api import health
+from app.api import health, status
+from app.api import sync as sync_api
+from app.api.errors import install_error_handlers
 from app.config import Settings, get_settings
+from app.services.active_video import ActiveVideoService
 
 _request_id: ContextVar[str] = ContextVar("request_id", default="-")
 
@@ -101,6 +104,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.add_middleware(RequestIdMiddleware)
     app.include_router(health.router)
+    app.include_router(sync_api.router)
+    app.include_router(status.router)
+    install_error_handlers(app)
+    app.state.active_video = ActiveVideoService()
 
     static_dir = Path(__file__).parent / "static"
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

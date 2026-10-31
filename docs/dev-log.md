@@ -170,3 +170,58 @@ bad-config startups (2 rejection cases).
 **Environment note:** deprecation warning observed — starlette's TestClient
 hints that `httpx` is deprecated in favor of `httpx2` upstream. No action now;
 revisit when the inference adapter (Sprint 9) picks its HTTP client.
+
+## 2026-10-30 — Sprint 3: Sync schema and active-video service
+
+**Goal:** Make video state valid, testable, and race-aware.
+
+**Plan & scope:** `SyncPayload`/`ActiveVideoState` schemas; strict YouTube URL
+classification; thread-safe `ActiveVideoService` with immutable revisioned
+snapshots; `POST /api/sync` + `GET /api/status`; structured error envelope with
+stable codes. Deferred: inference runtime probe (`unknown` until Sprint 9),
+request-size middleware (Sprint 13), local-file source (Sprint 6).
+
+**What was done:**
+
+- `app/schemas/sync.py` — `SyncPayload` (URL ≤2048 chars, finite non-negative
+  timestamp via `allow_inf_nan=False`, optional `video_id` pattern-checked,
+  `sync_source` literal) and frozen `ActiveVideoState` (architecture §6 fields).
+- `app/services/youtube_url.py` — parse-only classification: allowlisted hosts
+  (`youtube.com`, `www.youtube.com`, `m.youtube.com`, `youtu.be`), http(s)
+  only; `watch?v=` with exactly one valid `v`, `youtu.be/<id>` (single-slash
+  strict), `shorts/<id>`; everything else → `invalid_url` / `missing_video_id`.
+  Host-suffix lookalikes (`youtube.com.evil.com`) fail exact-match.
+- `app/services/active_video.py` — lock-guarded service, frozen snapshots,
+  revision increments on every accepted sync (stale syncs never overwrite
+  silently); concurrency test drives 40 syncs across 8 threads → revisions 1–40
+  unique.
+- `app/api/sync.py`, `app/api/status.py`, `app/api/deps.py`, `app/api/errors.py`
+  — routes translate `YouTubeUrlError` to 422 codes; `video_id` mismatch → 422
+  `video_id_mismatch`; `RequestValidationError` → envelope `validation_error`
+  with field list (no body echo); unhandled → generic 500 `internal_error`,
+  stack logged server-side only.
+- Status reports services separately: backend `ready`, inference `unknown`
+  (probe arrives Sprint 9), media_tools via `shutil.which("ffmpeg")`.
+- Logs: `sync accepted revision=… video_id=… timestamp=… source=…` — full URLs
+  never logged (verified by grep on the live server log).
+- Docs: AGENTS.md inference-port line corrected to 11434 (Sprint 1 decision).
+
+**Verification (roadmap Sprint 3 checklist):**
+
+- [x] Valid URL/timestamp updates state (live curl: revision 1, full snapshot)
+- [x] Invalid URL and timestamp return 4xx (live: `invalid_url`, NaN → `validation_error`)
+- [x] Re-sync increments revision (unit + live)
+- [x] Status returns `null` state before first sync (unit test)
+- [x] URL parsing works with extra query parameters (parametrized tests)
+- [x] A stale request cannot silently overwrite a newer snapshot without
+  incrementing revision (dedicated test: stale sync → revision bumps, snapshot moves)
+
+**Tests run:** `pytest` — 64 passed (24 prior + 40 new). Live: valid sync,
+status before/after, invalid host, NaN timestamp, URL-leak log grep.
+
+**Fix during sprint:** `youtu.be//<id>` (double slash) initially parsed via
+`lstrip` — tightened to single-slash strip; regression test added
+(`test_rejected_url_forms`).
+
+**Unverified / deferred:** userscript round-trip (Sprint 5); `manual` sync
+endpoint variant; CORS/Origin hardening (Sprint 13).

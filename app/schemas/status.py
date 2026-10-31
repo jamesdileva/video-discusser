@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from app import __version__
+from app.schemas.sync import ActiveVideoState
 
 
 class HealthResponse(BaseModel):
@@ -29,8 +30,7 @@ class ServiceStates(BaseModel):
 
 
 class StatusResponse(BaseModel):
-    """`GET /api/status` — populated from Sprint 3 onward; defined now so the
-    dashboard and tests share one contract."""
+    """`GET /api/status`."""
 
-    active_video: object | None = None
+    active_video: ActiveVideoState | None = None
     services: ServiceStates = ServiceStates()

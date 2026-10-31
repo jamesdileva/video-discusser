@@ -68,7 +68,8 @@ python scripts/check_environment.py
 ```
 
 Configuration lives in `.env` (copy from `.env.example`, never commit). Backend
-default port **8000**, inference runtime default port **8081** — always different.
+default port **8000**, inference runtime default port **11434** (Ollama; the
+llama-server fallback uses 8081) — always different.
 
 ## Sprint workflow
 
