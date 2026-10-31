@@ -17,14 +17,13 @@ sync state, the evidence the model was given, and the conversation.
 
 | Working | Not yet |
 |---|---|
-| Working | Not yet |
-|---|---|
-| Architecture, roadmap, implementation guide (Sprint 0) | Media adapters & frame extraction (Sprints 6–8) |
+| Architecture, roadmap, implementation guide; environment baseline (Sprint 0) | Evidence preview UI (Sprint 8) |
 | **Runtime feasibility: local VLM proven on the 4 GB AMD GPU (Sprint 1)** | Inference adapter & discussion (Sprints 9–10) |
 | **Backend skeleton: health endpoint, validated config (Sprint 2)** | Real-model evaluation (Sprint 11) |
 | **Sync API, race-aware active-video state, status endpoint (Sprint 3)** | Reliability, hardening & MVP release (Sprints 12–17) |
 | **Live dashboard: status polling, service indicators, chat shell (Sprint 4)** | |
 | **YouTube pause-sync userscript + dev test harness (Sprint 5)** | |
+| **Media adapters + frame extraction & bounded sampling (Sprints 6–7)** | |
 
 ## Requirements
 

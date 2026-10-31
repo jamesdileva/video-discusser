@@ -440,3 +440,77 @@ never exited non-zero.
 **Unverified / deferred:** a real yt-dlp download against YouTube (needs the
 binary + network + terms compliance decisions); frame extraction consumes
 these adapters in Sprint 7.
+
+## 2026-10-30 — Sprint 7: Frame extraction and bounded sampling
+
+**Goal:** Produce timestamped, inspectable frames within a strict resource
+budget.
+
+**Plan & scope:** pure sampling module (window clamping, anchor-inclusive
+even spread, configured-cap clamp), `extract_frames` with per-frame
+verification (existence, non-empty, probed dimensions, SHA-256), generated
+frame IDs, cache keys over source identity + plan + settings, disk-backed
+`FrameStore` re-indexed at startup, safe `GET /api/frames/{frame_id}`, and an
+age-bounded stale sweep. Deferred: dashboard thumbnails (Sprint 8 — the
+roadmap's own UI sprint; see deviation note), job queue/concurrency limits
+(Sprint 12).
+
+**What was done:**
+
+- `app/services/frame_sampling.py` — `compute_analysis_window` (start clamps
+  to 0 and to `duration - 0.05`), `plan_frame_timestamps` (anchor always
+  included as the last timestamp, remaining samples evenly spread, dedupe on
+  rounding — the cap is a maximum, never a promise), `clamp_max_frames`
+  (configured cap wins over any user request).
+- `app/services/frame_extraction.py` — one FFmpeg invocation per timestamp
+  (`-ss` fast-seek, scale filter preserving aspect, `-q:v` mapped from
+  configured JPEG quality); every output verified (exists, non-empty,
+  ffprobe dimensions — the scale filter's arithmetic is never assumed);
+  `FrameRecord` metadata (generated 32-hex ID, actual timestamp, relative
+  path, dims, SHA-256, source revision); batch metadata JSON per cache key;
+  `FrameStore` (thread-safe index, `load_from_disk`, containment-checked
+  `resolve_path`, stale sweep that never touches young entries).
+- `app/api/frames.py` — `GET /api/frames/{frame_id}`: 32-hex ID format gate,
+  registry lookup, containment-checked path, structured 404 envelope.
+- `app/main.py` — store constructed before the app, re-indexed in lifespan.
+
+**Real-world finding (fixed with a design change, not a patch):** the
+fixture's last *decodable* frame is at 9.9 s while the container duration is
+10.0 s — a seek to 9.95 s produces no output and this FFmpeg build exits -22.
+Extraction now retries each timestamp pulled back in bounded steps
+(0.25 s, 0.5 s, clamped to the window and to the previous recorded timestamp
+so monotonicity holds) and records the timestamp that actually produced the
+frame. The EOF guard in the sampler stays as the first line of defense.
+
+**Verification (roadmap Sprint 7 checklist):**
+
+- [x] A 180-second window stays within the configured frame cap (plan ≤ 12;
+  `clamp_max_frames(999, 12) == 12`).
+- [x] A timestamp before 180 seconds produces a start time of zero.
+- [x] Frame timestamps are monotonic and within the requested window (even
+  after EOF pull-backs — retry candidates are clamped to the previous frame).
+- [x] Empty/corrupt extraction returns a clear error (`frame_extraction_failed`
+  with FFmpeg stderr tail).
+- [x] Traversal attempts and unknown frame IDs are rejected — verified at all
+  three layers: literal `../..` is normalized by the HTTP client, encoded
+  `%2F` never matches the router, and the handler enforces 32-hex + registry
+  + containment (unit-tested with an injected escaping record).
+- [x] Preview images display — served frame rendered in a real browser
+  (screenshot, `image/jpeg` 200).
+- [x] Cache keys change when sampling settings change (dimension/quality/
+  timestamps/source identity each alter the key; identical inputs are
+  deterministic) and cache hits perform zero subprocess calls.
+
+**Tests run:** `pytest` — 134 passed (102 prior + 32 new; extraction/API
+tests use real FFmpeg and skip on machines without it). Live: extraction of
+4 frames from the fixture (anchor honestly recorded at 9.7 s after pull-back),
+`curl` 200 `image/jpeg`, bad ID → envelope, browser render.
+
+**Deviation note:** the roadmap's Sprint 7 checklist includes "preview images
+display in the dashboard"; dashboard thumbnails belong to Sprint 8 (evidence
+preview UI) per the same roadmap. The endpoint-level render was verified
+instead; no architecture change implied.
+
+**Unverified / deferred:** extraction from a YouTube download end-to-end
+(needs yt-dlp); cache budget by total disk size (Sprint 12); `fps`-style
+dense sampling near events (post-MVP Sprint 19).

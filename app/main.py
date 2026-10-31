@@ -28,9 +28,11 @@ from app.adapters.media_source import MediaSourceRegistry
 from app.adapters.youtube_source import YouTubeSource
 from app.api import health, status
 from app.api import sync as sync_api
+from app.api import frames as frames_api
 from app.api.errors import install_error_handlers
 from app.config import Settings, get_settings
 from app.services.active_video import ActiveVideoService
+from app.services.frame_extraction import FrameStore
 
 _request_id: ContextVar[str] = ContextVar("request_id", default="-")
 
@@ -81,18 +83,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     uses the cached `get_settings()`."""
     settings = settings or get_settings()
     configure_logging()
+    frame_store = FrameStore(settings.cache_dir)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         cache_dir = settings.ensure_cache_dir()
+        loaded = frame_store.load_from_disk()
         LOGGER.info(
-            "starting backend v%s env=%s host=%s port=%d cache=%s inference=%s "
-            "(model configured, not contacted at startup)",
+            "starting backend v%s env=%s host=%s port=%d cache=%s frames_restored=%d "
+            "inference=%s (model configured, not contacted at startup)",
             __version__,
             settings.app_env,
             settings.app_host,
             settings.app_port,
             cache_dir,
+            loaded,
             settings.inference_base_url,
         )
         yield
@@ -110,11 +115,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(sync_api.router)
     app.include_router(status.router)
+    app.include_router(frames_api.router)
     install_error_handlers(app)
     app.state.active_video = ActiveVideoService()
     app.state.media_sources = MediaSourceRegistry(
         [LocalFileSource(settings), YouTubeSource(settings)]
     )
+    app.state.frame_store = frame_store
 
     if settings.app_env == "development":
         _install_dev_fixture_routes(app)
