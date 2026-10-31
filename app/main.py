@@ -35,6 +35,7 @@ from app.api.errors import install_error_handlers
 from app.config import Settings, get_settings
 from app.services.active_video import ActiveVideoService
 from app.services.frame_extraction import FrameStore
+from app.services.inference import OllamaInferenceAdapter
 
 _request_id: ContextVar[str] = ContextVar("request_id", default="-")
 
@@ -97,6 +98,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging()
     frame_store = FrameStore(settings.cache_dir)
+    inference_adapter = OllamaInferenceAdapter(settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -114,6 +116,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings.inference_base_url,
         )
         yield
+        inference_adapter.close()
         LOGGER.info("backend stopped")
 
     app = FastAPI(
@@ -138,6 +141,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.frame_store = frame_store
     app.state.settings = settings
     app.state.evidence_lock = threading.Lock()
+    app.state.inference_adapter = inference_adapter
 
     if settings.app_env == "development":
         _install_dev_fixture_routes(app)

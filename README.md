@@ -24,7 +24,8 @@ sync state, the evidence the model was given, and the conversation.
 | **Live dashboard: status polling, service indicators, chat shell (Sprint 4)** | |
 | **YouTube pause-sync userscript + dev test harness (Sprint 5)** | |
 | **Media adapters + frame extraction & bounded sampling (Sprints 6–7)** | Inference adapter & discussion (Sprints 9–10) |
-| **Evidence preview UI: local-file sync, thumbnails, window selector (Sprint 8)** | Real-model evaluation (Sprint 11) |
+| **Evidence preview UI: local-file sync, thumbnails, window selector (Sprint 8)** | Discussion orchestration (Sprint 10) |
+| **Inference adapter: Ollama health + typed failures, live-tested (Sprint 9)** | Real-model evaluation (Sprint 11) |
 
 ## Requirements
 

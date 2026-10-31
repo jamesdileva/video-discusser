@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     inference_model: str = "qwen3.5:4b"
     inference_timeout_seconds: int = Field(default=180, ge=5, le=3600)
     max_concurrent_inference: int = Field(default=1, ge=1, le=4)
+    # Context window requested per generation; 12 frames cost ~4k vision
+    # tokens (docs/runtime-feasibility.md), so 8192 is the working default.
+    inference_num_ctx: int = Field(default=8192, ge=1024, le=65536)
 
     # --- Media extraction ------------------------------------------------
     extraction_timeout_seconds: int = Field(default=120, ge=5, le=3600)

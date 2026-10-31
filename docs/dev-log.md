@@ -590,3 +590,77 @@ path, cache-key stability across identical previews.
 **Unverified / deferred:** preview of a real YouTube download (needs yt-dlp +
 opt-in); question submit still a local placeholder until Sprint 10; UI
 polish pass comes with Sprint 14 (trust/layout).
+
+## 2026-10-31 — Sprint 9: Inference adapter
+
+**Goal:** Integrate the chosen runtime without coupling API routes to
+runtime-specific details.
+
+**Plan & scope:** `OllamaInferenceAdapter` + `RuntimeCapabilities` +
+injectable transport; health probe (TTL-cached) wired into `/api/status`;
+the exact `/api/chat` payload proven in Sprint 1 (base64 images, `num_ctx`,
+`think` with 400-fallback); typed failures; mocked tests + a skip-guarded
+live test. Deferred: prompt construction and orchestration (Sprint 10 — the
+adapter deliberately takes prepared prompts), benchmarking (Sprint 11),
+`max_concurrent_inference` enforcement (arrives with the Sprint 10/12 job
+queue).
+
+**What was done:**
+
+- `app/services/inference.py` — adapter with `health_check()` (GET
+  `/api/version`, 2 s timeout, 10 s TTL so the dashboard's 2.5 s poll does
+  not hammer the runtime), `describe_capabilities()` (image input: verified
+  Sprint 1; **video input: False — never verified, nothing may assume it**;
+  max images = configured frame cap), `generate(system_prompt, user_prompt,
+  image_paths, timeout, num_ctx, think)` (base64-encodes verified non-empty
+  frames, validates response shape, rejects empty content, retries once
+  without `think` on HTTP 400 for non-thinking models). Typed
+  `InferenceError` codes: `inference_unavailable`, `inference_timeout`,
+  `inference_invalid_response`, `inference_empty_response`,
+  `inference_invalid_request`. `HttpxInferenceTransport` (pooled client) is
+  the default; tests inject a fake.
+- `app/config.py` — `INFERENCE_NUM_CTX` (default 8192; 12 frames ≈ 4k
+  vision tokens per the feasibility record).
+- `app/api/status.py` — inference state from the adapter probe (`ready` /
+  `unavailable`), replacing the Sprint 3–8 `unknown` placeholder.
+- `app/main.py` — adapter on `app.state`, closed at shutdown.
+
+**Deviations (recorded per AGENTS.md):** the architecture's
+`generate(messages, settings)` sketch became a stricter typed signature
+(`system_prompt`/`user_prompt`/`image_paths` + bounded options) — same
+contract intent (routes never see runtime details). Health returns a plain
+state string matching `ServiceState` rather than a `RuntimeHealth` type.
+
+**Verification (roadmap Sprint 9 checklist):**
+
+- [x] Health probe reports ready/unavailable accurately — live:
+  `/api/status` → `{'backend': 'ready', 'inference': 'ready', 'media_tools':
+  'ready'}` against running Ollama; mocked: unreachable → `unavailable`
+  (and the probe bug below proved the failure path).
+- [x] One known image can be sent through the adapter — live test (skipped
+  automatically when the runtime is absent): deterministic frame through the
+  REAL qwen3.5:4b → answer contains "red" and "42". Passed in-suite (~50 s
+  cold load).
+- [x] Missing runtime → `inference_unavailable` (mocked ConnectError +
+  HTTP 500 cases).
+- [x] Timeout → `inference_timeout` (mocked ReadTimeout).
+- [x] Invalid response content handled — non-JSON, missing/typed-wrong
+  `message.content`, OpenAI-shaped body, whitespace-only answer.
+- [x] Video-input assumption guarded — `supports_video_input=False` asserted
+  by a dedicated test; payload sends frames as individual base64 images only.
+
+**Bugs caught by tests during the sprint:** health probe called the
+transport unwrapped (a dead runtime raised raw `httpx.ConnectError` instead
+of returning "unavailable") — fixed with a `_get_json` wrapper mirroring the
+POST path; a signature mismatch (`timeout_seconds` vs `timeout`) caught
+immediately after. The live test's collection-time gate also proved flaky
+with the adapter's 2 s health timeout — the gate now probes directly with 5 s.
+
+**Tests run:** `pytest` — 165 passed (148 prior + 18 new, including the
+live-model test; skips cleanly on machines without the runtime). Live:
+`/api/status` inference ready.
+
+**Unverified / deferred:** `num_ctx` 8192 under a full 12-frame payload on
+the 4 GB GPU (Sprint 11 measures); concurrency (Sprint 10/12); multi-image
+ordering through the adapter (proven at the API level in Sprint 1, exercised
+by orchestration tests in Sprint 10).
