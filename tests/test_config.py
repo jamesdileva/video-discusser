@@ -85,3 +85,15 @@ def test_ensure_cache_dir_actionable_error(tmp_path) -> None:
     with pytest.raises(RuntimeError) as excinfo:
         s.ensure_cache_dir()
     assert "CACHE_DIR" in str(excinfo.value)
+
+
+def test_local_media_dirs_semicolon_parsing() -> None:
+    s = Settings(local_media_dirs=r"C:\Videos;D:\Clips", _env_file=None)  # type: ignore[call-arg]
+    assert [str(p) for p in s.local_media_dirs] == [r"C:\Videos", r"D:\Clips"]
+
+
+def test_local_media_dirs_empty_and_defaults() -> None:
+    assert Settings(local_media_dirs="", _env_file=None).local_media_dirs == []  # type: ignore[call-arg]
+    assert Settings(local_media_dirs=None, _env_file=None).local_media_dirs == []  # type: ignore[call-arg]
+    assert Settings(_env_file=None).youtube_source_enabled is False  # type: ignore[call-arg]
+    assert 5 <= Settings(_env_file=None).media_download_timeout_seconds <= 3600  # type: ignore[call-arg]

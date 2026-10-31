@@ -14,7 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -54,6 +54,17 @@ class Settings(BaseSettings):
     extraction_timeout_seconds: int = Field(default=120, ge=5, le=3600)
     cache_dir: Path = Path("./data/cache")
 
+    # --- Media sources ------------------------------------------------------
+    # Semicolon-separated allowlist of directories the local-file source may
+    # read from. Browser-supplied paths are only honored inside these roots;
+    # the roots themselves come from trusted local configuration. Empty list
+    # disables local-file mode.
+    local_media_dirs: list[Path] = Field(default_factory=list)
+    # Optional YouTube source via yt-dlp. Off by default; downloading must
+    # comply with platform terms and applicable law (no DRM circumvention).
+    youtube_source_enabled: bool = False
+    media_download_timeout_seconds: int = Field(default=600, ge=5, le=3600)
+
     # --- Frame & window budgets (server clamps requests to these) -------
     analysis_window_seconds: int = Field(default=180, ge=5, le=3600)
     max_frames_per_request: int = Field(default=12, ge=1, le=45)
@@ -64,6 +75,17 @@ class Settings(BaseSettings):
     # --- Input bounds ------------------------------------------------------
     max_question_chars: int = Field(default=2000, ge=1, le=10000)
     max_chat_turns: int = Field(default=8, ge=1, le=50)
+
+    @field_validator("local_media_dirs", mode="before")
+    @classmethod
+    def _split_local_media_dirs(cls, value: object) -> object:
+        """Accept `DIR1;DIR2` (Windows `:` in drive letters rules out commas)."""
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            parts = (part.strip().strip('"') for part in value.split(";"))
+            return [part for part in parts if part]
+        return value
 
     @model_validator(mode="after")
     def _validate_security_and_consistency(self) -> "Settings":

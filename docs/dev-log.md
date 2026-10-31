@@ -367,3 +367,76 @@ is verified by the harness.
 **Fixture note:** `browser/fixtures/test-clip.mp4` is a committed 27 KB
 generated test clip (testsrc pattern) — deliberate test fixture, not cached
 media.
+
+## 2026-10-30 — Sprint 6: Media-source adapter and environment checks
+
+**Goal:** Isolate source access and make extraction failures understandable.
+
+**Plan & scope:** `MediaSource` contract + registry; local-file source first
+(allowlisted roots from trusted config); opt-in yt-dlp YouTube adapter; single
+disciplined subprocess chokepoint; `scripts/check_environment.py`. Deferred:
+frame extraction (Sprint 7), real yt-dlp download (not installed here — runner
+faked at the seam; the adapter is exercised for real once the feature is
+used), status-endpoint granularity.
+
+**What was done:**
+
+- `app/adapters/subprocess_utils.py` — the only path to external tools:
+  argument arrays (non-list input rejected), explicit timeout (subprocess.run
+  kills and reaps the child), bounded stderr tails, explicit return-code
+  checks, typed `CommandError` with stable codes (`media_tool_missing`,
+  `process_timeout`, `process_failed`).
+- `app/adapters/media_source.py` — `MediaRequest`/`ResolvedMedia` frozen
+  dataclasses, `MediaSource` protocol, `MediaSourceRegistry` (on
+  `app.state.media_sources`), shared `probe_media()` via ffprobe JSON
+  (actionable errors: missing tool, non-video file, non-numeric/non-positive
+  duration).
+- `app/adapters/local_file_source.py` — resolves only paths inside
+  `LOCAL_MEDIA_DIRS` roots (resolved-path containment, so `..` traversal and
+  symlink escapes fail as `local_path_not_allowed`); disabled with guidance
+  when no roots are configured; probes before returning.
+- `app/adapters/youtube_source.py` — opt-in via `YOUTUBE_SOURCE_ENABLED`
+  (downloading must comply with platform terms; no DRM circumvention);
+  validates the URL with the sync URL parser *before* any tool is invoked;
+  clear `media_tool_missing` when yt-dlp is absent; generated UUID output
+  names (never URL-derived); typed failures (`media_download_failed`,
+  `media_download_timeout`); `cleanup_after_use=True` for downloads.
+- `app/config.py` — `LOCAL_MEDIA_DIRS` (semicolon-separated; commas unusable
+  inside Windows drive letters), `YOUTUBE_SOURCE_ENABLED`,
+  `MEDIA_DOWNLOAD_TIMEOUT_SECONDS`.
+- `app/main.py` — registry wired into app state.
+- `scripts/check_environment.py` — Python/config/FFmpeg/ffprobe required;
+  yt-dlp + inference runtime optional warnings; cache writability; local
+  roots; exit 0/1 semantics.
+
+**Verification (roadmap Sprint 6 checklist):**
+
+- [x] Local sample video probed and read by FFmpeg — the committed fixture
+  clip resolves: duration ≈ 10 s, 256×144, real ffprobe JSON (also through
+  the app-wired registry).
+- [x] Unsupported URLs rejected before invoking external tools — spy runner
+  asserts zero invocations for non-YouTube URLs and while disabled.
+- [x] Missing FFmpeg produces an actionable error — `media_tool_missing`
+  includes install guidance (`winget install Gyan.FFmpeg`).
+- [x] yt-dlp failure does not crash — every failure surfaces as typed
+  `MediaSourceError` with bounded stderr in the message.
+- [x] Child processes time out and terminate correctly — 30 s sleeper with a
+  2 s budget raises `process_timeout` in < 10 s wall time (run() reaps).
+- [x] No command built by string concatenation — argument arrays enforced in
+  `run_command` (type check) and asserted by every fake runner; URL rides as
+  a single argv element.
+
+Also: config parsing tests (semicolon split), env script failure path
+(`APP_HOST=0.0.0.0` → exit 1 + "Configuration invalid").
+
+**Tests run:** `pytest` — 102 passed (74 prior + 28 new). Live:
+`check_environment.py` → `Result: OK` exit 0 (Ollama detected at 11434).
+
+**Test bugs caught during the sprint (mine, fixed immediately):** a
+monkeypatch of the shared `shutil` module that leaked into ffprobe lookups
+(fixture now delegates non-yt-dlp lookups), and a stderr test whose command
+never exited non-zero.
+
+**Unverified / deferred:** a real yt-dlp download against YouTube (needs the
+binary + network + terms compliance decisions); frame extraction consumes
+these adapters in Sprint 7.
