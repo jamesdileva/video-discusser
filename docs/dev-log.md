@@ -287,3 +287,83 @@ browser verification as above.
 **Unverified / deferred:** pause-on-hidden-tab behavior observed via
 `visibilitychange` wiring only (static test), not with a manually hidden tab;
 userscript round-trip (Sprint 5).
+
+## 2026-10-30 — Sprint 5: YouTube userscript synchronization
+
+**Goal:** Make the real pause-to-sync workflow reliable.
+
+**Plan & scope:** `browser/youtube-sync.user.js` (Tampermonkey), SPA-safe
+pause capture, dedupe, manual sync fallback, status pill, `browser/README.md`
+setup + manual checklist, dev-only fixture routes + local test harness,
+Node-run core tests. Deferred: real-Tampermonkey manual run (user machine —
+checklist provided), ad filtering beyond best-effort, non-watch pages,
+settings UI beyond the menu command.
+
+**What was done:**
+
+- `browser/youtube-sync.user.js` — `@match` limited to youtube.com watch
+  pages; capture-mode `document`-level `pause` listener (survives video
+  element replacement, no rebinding); `location.href`/`currentTime` read at
+  event time; `yt-navigate-finish` resets the badge on SPA navigation;
+  duplicate suppression (same video+source within ±0.25 s); manual **Sync
+  now** (pill button + `GM_registerMenuCommand`, `sync_source: "manual"`);
+  loopback-validated "Set backend origin" menu command; transport via
+  `GM_xmlhttpRequest` (`@connect 127.0.0.1/localhost`) so the backend needs
+  no CORS headers; best-effort ad-break filter; textContent-only pill.
+  DOM-free core (`extractVideoId/buildPayload/isDuplicate/formatTimestamp`)
+  exported for tests and kept mirroring `app/services/youtube_url.py`.
+- Dev harness: `app/static/dev-harness.html` loads the real userscript with
+  GM stubs (proxied to same-origin fetch), a committed 27 KB fixture clip
+  (`browser/fixtures/test-clip.mp4`), synthetic pause, simulated SPA
+  navigation via the documented `__vdTestHref` seam (a page could spoof the
+  reported URL, but it already controls its own video element — no new
+  capability), and an activity log. Served through dev-only routes
+  (`/dev/youtube-sync.user.js`, `/dev/test-clip.mp4`) registered only when
+  `APP_ENV=development`.
+- `tests/js/userscript_core.test.cjs` + `tests/test_userscript.py` — Node
+  assertion suite for the core (URL cases mirror the backend pytest matrix so
+  client/server cannot drift), pytest wrapper (skips if node absent), static
+  metadata/safety checks, dev-route contract.
+
+**Bugs caught by verification during this sprint:**
+
+1. `setBadge` referenced a badge const scoped inside `ensureBadge()` →
+   ReferenceError swallowed into "sync failed". Fixed by hoisting badge refs
+   to the `main()` scope. (Caught by the first harness run.)
+2. Harness-only: SPA-simulation IDs were 12 chars → correctly rejected by the
+   11-char regex ("not a watch page"). Fixed the fixture.
+3. Client/server drift caught by the Node suite: `extractVideoId` accepted
+   non-http(s) schemes (`ftp://www.youtube.com/...`) that the backend
+   rejects; scheme check added so the client never sends doomed requests.
+
+**Verification — Node suite + live harness run (real browser, real backend):**
+
+- [x] Pause sends the correct URL and timestamp (synthetic pause at 4.2 s →
+  POST with `video_id`, `timestamp_seconds: 4.2`, `pause_event`; badge
+  "synced 00:04.2"; server state confirmed via `/api/status`).
+- [x] Play/resume/pause cycles update state — a natural pause during playback
+  after an earlier sync produced a second, distinct sync attempt.
+- [x] Navigating to another video in the same tab (simulated SPA) syncs the
+  new video ID without reload (`aaaaaaaaaa7` @ 2.5 s).
+- [x] Pausing near 0 seconds is valid — ≥ 0 enforced; near-zero pauses within
+  the epsilon dedupe as duplicates by design (covered by Node boundary tests).
+- [x] Backend offline does not break playback — pause showed "backend
+  offline", video played on, and manual **Sync now** after restart succeeded
+  (`sync_source: "manual"`, server rev 1 on the fresh process).
+- [x] Other websites are not targeted — `@match` youtube.com watch pages only
+  (static test), core host allowlist mirrors the backend.
+
+Also: duplicate pause suppressed with no new request; "Sync now" works;
+backend rejection codes surface in the pill.
+
+**Tests run:** `pytest` — 74 passed (68 prior + 6 new); node core suite —
+all assertions passed (including after the scheme fix).
+
+**Still unverified (needs your machine — see `browser/README.md` checklist):**
+the real Tampermonkey round-trip on live YouTube (install, @connect approval,
+SPA navigation, real playback controls). Everything up to Tampermonkey itself
+is verified by the harness.
+
+**Fixture note:** `browser/fixtures/test-clip.mp4` is a committed 27 KB
+generated test clip (testsrc pattern) — deliberate test fixture, not cached
+media.

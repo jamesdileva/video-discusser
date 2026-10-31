@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Discusser — userscript test harness</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: "Segoe UI", system-ui, sans-serif; background: #14161c; color: #e6e8ee; margin: 0; padding: 1.5rem; }
+    h1 { font-size: 1.2rem; margin: 0 0 0.25rem; }
+    p.meta { color: #9aa1b2; font-size: 0.85rem; margin: 0 0 1rem; }
+    main { max-width: 860px; display: grid; gap: 1rem; }
+    section { background: #1d2029; border: 1px solid #2a2e3a; border-radius: 10px; padding: 1rem 1.25rem; }
+    h2 { font-size: 0.95rem; margin: 0 0 0.6rem; color: #9aa1b2; }
+    video { display: block; background: #000; border-radius: 8px; }
+    button { background: #7aa2f7; color: #10131c; border: none; border-radius: 8px; padding: 0.5rem 0.9rem; font: 600 0.85rem "Segoe UI", sans-serif; cursor: pointer; margin: 0.25rem 0.5rem 0.25rem 0; }
+    input[type="number"] { background: #14161c; color: #e6e8ee; border: 1px solid #2a2e3a; border-radius: 8px; padding: 0.45rem 0.6rem; width: 90px; font: inherit; }
+    #log { background: #14161c; border: 1px solid #2a2e3a; border-radius: 8px; min-height: 120px; max-height: 220px; overflow-y: auto; padding: 0.5rem 0.75rem; font: 12px/1.5 Consolas, monospace; white-space: pre-wrap; }
+    .warn { color: #d4a72c; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>Userscript test harness (dev only)</h1>
+      <p class="meta">
+        Exercises <code>browser/youtube-sync.user.js</code> on a real page without
+        Tampermonkey: GM APIs are stubbed below (requests are proxied through
+        <code>fetch</code> to the same origin), and YouTube SPA behavior is
+        simulated with <code>history.pushState</code> + a synthetic
+        <code>yt-navigate-finish</code> event.
+      </p>
+      <p class="warn">Note: the simulated watch URL lives in <code>window.__vdSimulatedHref</code>
+      (read by the userscript through its documented <code>__vdTestHref</code> seam) —
+      reloading the harness resets it.</p>
+    </section>
+
+    <section>
+      <h2>Fake player</h2>
+      <video id="fake-player" width="256" height="144" controls playsinline
+             src="/dev/test-clip.mp4"></video>
+      <div style="margin-top: 0.6rem;">
+        <label for="seek-seconds">Seconds:</label>
+        <input id="seek-seconds" type="number" min="0" max="10" step="0.1" value="4.2">
+        <button id="btn-seek-pause" type="button">Seek &amp; pause (natural event)</button>
+        <button id="btn-synth-pause" type="button">Dispatch synthetic pause</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>SPA navigation simulation</h2>
+      <button id="btn-spa" type="button">Navigate to another “video” (pushState + yt-navigate-finish)</button>
+      <p class="meta">Next pause must sync the new URL/video ID. Simulated watch URL:
+        <code id="current-path">(set at load)</code></p>
+    </section>
+
+    <section>
+      <h2>Activity log</h2>
+      <div id="log" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <!-- GM stubs MUST be defined before the userscript loads. They record every
+       call so the activity log can show what the userscript did. -->
+  <script>
+    "use strict";
+    window.__gmStore = {};
+    window.__gmCalls = [];
+    window.GM_getValue = function (key, fallback) {
+      return key in window.__gmStore ? window.__gmStore[key] : fallback;
+    };
+    window.GM_setValue = function (key, value) {
+      window.__gmStore[key] = value;
+    };
+    window.GM_registerMenuCommand = function (label, fn) {
+      window.__gmCalls.push({ kind: "menu", label: label });
+      window.__gmMenuCommands = window.__gmMenuCommands || {};
+      window.__gmMenuCommands[label] = fn;
+      window.logLine && window.logLine("menu command registered: " + label);
+    };
+    window.GM_xmlhttpRequest = function (options) {
+      window.__gmCalls.push({ kind: "request", url: options.url, data: options.data });
+      window.logLine("GM_xmlhttpRequest → " + options.url);
+      window.logLine("  payload: " + options.data);
+      fetch(options.url, {
+        method: options.method || "GET",
+        headers: options.headers,
+        body: options.data,
+      })
+        .then(async function (resp) {
+          const text = await resp.text();
+          window.logLine("  ← " + resp.status + " " + text.slice(0, 200));
+          if (options.onload) options.onload({ status: resp.status, responseText: text });
+        })
+        .catch(function (err) {
+          window.logLine("  ← network error: " + err);
+          if (options.onerror) options.onerror(err);
+        });
+      return { abort: function () {} };
+    };
+  </script>
+
+  <script src="/dev/youtube-sync.user.js"></script>
+
+  <script>
+    "use strict";
+    (function () {
+      const log = document.getElementById("log");
+      window.logLine = function (line) {
+        const stamp = new Date().toLocaleTimeString([], { hour12: false });
+        log.textContent += "[" + stamp + "] " + line + "\n";
+        log.scrollTop = log.scrollHeight;
+      };
+
+      const video = document.getElementById("fake-player");
+      const seekInput = document.getElementById("seek-seconds");
+
+      document.getElementById("btn-seek-pause").addEventListener("click", async function () {
+        const target = Number(seekInput.value);
+        try {
+          if (video.readyState < 1) {
+            await new Promise(function (resolve) { video.addEventListener("loadedmetadata", resolve, { once: true }); });
+          }
+          // Seek FIRST, then pause — so the natural pause event fires at the
+          // target position, exactly like a real user pausing there.
+          video.currentTime = target;
+          if (!video.paused) {
+            video.pause(); // natural pause event → the userscript should sync
+          } else {
+            window.logLine("already paused at " + target + "s (no new event; use the synthetic pause button)");
+          }
+        } catch (err) {
+          window.logLine("seek/pause failed: " + err);
+        }
+      });
+
+      document.getElementById("btn-synth-pause").addEventListener("click", function () {
+        const target = Number(seekInput.value);
+        if (Number.isFinite(target) && video.readyState >= 1) {
+          try { video.currentTime = target; } catch (err) { /* ignore */ }
+        }
+        video.dispatchEvent(new Event("pause")); // capture-phase listener must catch this
+        window.logLine("dispatched synthetic pause at currentTime=" + video.currentTime.toFixed(2) + "s");
+      });
+
+      document.getElementById("btn-spa").addEventListener("click", function () {
+        const nextId = "aaaaaaaaaa" + Math.floor(Math.random() * 10); // exactly 11 chars
+        window.__vdSimulatedHref = "https://www.youtube.com/watch?v=" + nextId + "&t=7s";
+        document.dispatchEvent(new Event("yt-navigate-finish"));
+        document.getElementById("current-path").textContent = window.__vdSimulatedHref;
+        window.logLine("simulated SPA navigation → " + window.__vdSimulatedHref);
+      });
+
+      video.addEventListener("pause", function () {
+        window.logLine("video 'pause' event at currentTime=" + video.currentTime.toFixed(2) + "s");
+      });
+
+      window.logLine("harness ready");
+
+      // Simulated watch URL. On real YouTube the userscript reads
+      // location.href; the harness can't change location to youtube.com, so
+      // it provides the documented __vdTestHref seam instead. SPA navigation
+      // is simulated by pointing it at a different video.
+      window.__vdSimulatedHref = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1s";
+      window.__vdTestHref = function () {
+        return window.__vdSimulatedHref;
+      };
+      document.getElementById("current-path").textContent = window.__vdSimulatedHref;
+      window.logLine("simulated watch URL: " + window.__vdSimulatedHref);
+    })();
+  </script>
+</body>
+</html>

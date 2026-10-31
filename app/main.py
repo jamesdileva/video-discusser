@@ -18,6 +18,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -109,9 +110,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_error_handlers(app)
     app.state.active_video = ActiveVideoService()
 
+    if settings.app_env == "development":
+        _install_dev_fixture_routes(app)
+
     static_dir = Path(__file__).parent / "static"
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
     return app
+
+
+def _install_dev_fixture_routes(app: FastAPI) -> None:
+    """Development-only fixtures for the userscript test harness
+    (`/dev-harness.html`). Never registered outside development."""
+    browser_dir = Path(__file__).resolve().parent.parent / "browser"
+
+    @app.get("/dev/youtube-sync.user.js", include_in_schema=False)
+    async def dev_userscript() -> FileResponse:
+        return FileResponse(
+            browser_dir / "youtube-sync.user.js", media_type="text/javascript"
+        )
+
+    @app.get("/dev/test-clip.mp4", include_in_schema=False)
+    async def dev_test_clip() -> FileResponse:
+        return FileResponse(
+            browser_dir / "fixtures" / "test-clip.mp4", media_type="video/mp4"
+        )
 
 
 app = create_app()
