@@ -744,3 +744,66 @@ version-independent `/api/chat` payload held.
 **Unverified / deferred:** multi-turn follow-ups reuse cached frames but
 have no server-side history (Sprint 15); formal quality evaluation on a
 varied test set is Sprint 11's whole purpose.
+
+## 2026-11-03 — Sprint 11: First real end-to-end model evaluation
+
+**Goal:** Prove the entire workflow with known videos and record where it
+fails.
+
+**Plan & scope:** a repeatable harness (`scripts/run_evaluation.py`) with a
+fixed six-case test set over generated, ground-truth-controlled clips;
+results JSON; `docs/evaluation-report.md` with the profile decision.
+Deferred: real-footage cases (needs lawful local media / yt-dlp decisions);
+model comparisons (not warranted by results).
+
+**What was done:**
+
+- `scripts/run_evaluation.py` — generates deterministic clips with FFmpeg
+  (constant "GATE 7" text; a yellow "ALERT 42" sign shown only t=8–9 s;
+  "DOCK 4" at boxblur 12), drives the real `DiscussionService` per case,
+  applies objective any-of substring verdicts (ambiguous cases recorded,
+  not judged), captures latency, frames used, and `ollama ps` memory, and
+  writes `data/cache/eval/results.json`.
+- Cases map to the roadmap's required categories: clear visual fact;
+  audio-dependent honesty; an event between sampled frames **in both
+  directions** (missed by design, then sampled by anchor); ambiguity;
+  sequence reasoning.
+- Two harness bugs fixed before results: the sync anchor was hardcoded
+  (cases would all have analyzed t≈1 s), and FFmpeg's filter parser rejects
+  escaped drive-colons in `fontfile` on Windows — the font is copied next to
+  the clips and referenced colon-free with `cwd=EVAL_DIR`. A first dead run
+  also exposed that the harness must set its own allowlist roots rather than
+  read the user's `.env` (now deliberate and documented).
+
+**Results (full detail in `docs/evaluation-report.md`):**
+
+- **5/5 judged cases PASSED**, 1 favorable RECORD (model read blurred
+  "DOCK 4" — ground-truth-correct, no fabrication).
+- The negative gates held: no speech quoted from a silent clip; "no yellow
+  sign" correctly reported when sampling missed it, "ALERT 42" found when
+  the anchor sampled it; between-frame changes explicitly declined.
+- Latency 31–67 s per case (thinking on); model 2.8 GB at 73% GPU, ctx 8192,
+  no OOM anywhere.
+
+**Decision (recorded in the report):** MVP profile **confirmed unchanged** —
+`qwen3.5:4b` + thinking on; 6-frame live / 12-frame preview budgets; 768 px;
+600 s timeout. A 7B experiment is not justified by this evidence.
+
+**Verification (roadmap Sprint 11 checklist):**
+
+- [x] All test cases have recorded results (JSON + report table).
+- [x] The model identifies when evidence is insufficient (audio case;
+  event-missed case; "cannot be established" sections throughout).
+- [x] No critical false certainty remains unaddressed (no fabricated
+  speech, events, or text in any answer; the one hedged mis-description of
+  grey-as-black is noted in the report).
+- [x] Peak memory within practical limits (2.8 GB / 4 GB card, 73% GPU).
+- [x] Chosen default profile is based on measured quality and speed
+  (decision section; levers named for measured need, one variable at a time).
+
+**Tests run:** full `pytest` suite green earlier in the session (174 passed);
+evaluation harness run twice (once to surface the config bug, once clean).
+Live: the evaluation IS the live run.
+
+**Unverified / deferred:** real-footage cases; `think:false` A/B; sub-second
+citation labels (Sprint 14 UI shows exact timestamps via thumbnails).

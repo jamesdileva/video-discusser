@@ -25,7 +25,8 @@ sync state, the evidence the model was given, and the conversation.
 | **YouTube pause-sync userscript + dev test harness (Sprint 5)** | |
 | **Media adapters + frame extraction & bounded sampling (Sprints 6–7)** | |
 | **Evidence preview UI: local-file sync, thumbnails, window selector (Sprint 8)** | |
-| **Inference adapter (9) + discussion orchestration (10): grounded answers from the local model** | |
+| **Inference adapter (9) + discussion orchestration (10): grounded answers from the local model** | Reliability & hardening (Sprints 12–13) |
+| **Evaluation: 5/5 judged cases pass — honest uncertainty, correct citations, measured profile ([report](docs/evaluation-report.md), Sprint 11)** | Setup experience & MVP release (Sprints 16–17) |
 
 ## Requirements
 
