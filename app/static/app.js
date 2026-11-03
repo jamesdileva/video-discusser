@@ -316,16 +316,83 @@
   function onChatSubmit(event) {
     event.preventDefault();
     const question = els["question-input"].value.trim();
-    if (!question) return;
+    if (!question || chatInFlight) return;
     chatStarted = true;
     appendChatMessage("user", "You", question);
     els["question-input"].value = "";
-    appendChatMessage(
-      "system",
-      "System",
-      "Not sent — model discussion arrives in a later sprint. " +
-        "The question is kept locally in this view only."
-    );
+    runDiscussion(question);
+  }
+
+  // --- discussion (Sprint 10): question → evidence → local model --------------
+
+  let chatInFlight = false;
+
+  function setChatInFlight(inFlight) {
+    chatInFlight = inFlight;
+    if (els["ask-button"] && els["question-input"]) {
+      const hasVideo = Boolean(lastKnownStatus && lastKnownStatus.active_video);
+      els["ask-button"].disabled = inFlight || !hasVideo;
+      els["question-input"].disabled = inFlight || !hasVideo;
+      els["ask-button"].textContent = inFlight ? "Thinking…" : "Ask";
+    }
+  }
+
+  async function runDiscussion(question) {
+    setChatInFlight(true);
+    appendChatMessage("system", "System", "Gathering frames and asking the local model…");
+    try {
+      const resp = await fetch("/api/discuss", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          question: question,
+          window_seconds: Number(els["window-select"].value),
+          // Live-conversation profile: fewer frames keeps answers responsive
+          // on the target GPU (12-frame requests measured >180 s in Sprint 10).
+          max_frames: 6,
+        }),
+      });
+      const body = await resp.json();
+      if (!resp.ok) {
+        const code = body && body.error ? body.error.code : "HTTP " + resp.status;
+        const message = body && body.error ? body.error.message : "";
+        appendChatMessage("system", "System", "Question failed — " + code + ". " + message);
+        return;
+      }
+      // Shape the answer's frames into the evidence card's preview form so
+      // both features render through one code path.
+      lastPreview = {
+        cache_key: "",
+        snapshot_revision: body.snapshot_revision,
+        video_id: body.video_id,
+        source: body.source,
+        window: {
+          start_seconds: body.window_start_seconds,
+          end_seconds: body.window_end_seconds,
+        },
+        frames: body.frames_used,
+        warnings: body.warnings,
+      };
+      renderFrames(lastPreview);
+      markPreviewStaleForState(
+        lastKnownStatus ? lastKnownStatus.active_video : null
+      );
+      appendChatMessage("discusser", "Discusser", body.answer);
+      if (body.revision_changed) {
+        appendChatMessage(
+          "system",
+          "System",
+          "Note: the active video changed while the model was working — " +
+            "this answer belongs to snapshot #" +
+            body.snapshot_revision +
+            "."
+        );
+      }
+    } catch (err) {
+      appendChatMessage("system", "System", "Question failed — backend unreachable.");
+    } finally {
+      setChatInFlight(false);
+    }
   }
 
   // --- polling ------------------------------------------------------------------

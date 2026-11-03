@@ -48,11 +48,16 @@ class Settings(BaseSettings):
     # --- Inference runtime (Ollama per Sprint 1) ------------------------
     inference_base_url: str = "http://127.0.0.1:11434"
     inference_model: str = "qwen3.5:4b"
-    inference_timeout_seconds: int = Field(default=180, ge=5, le=3600)
+    # Sprint 10 telemetry: 12 frames + thinking on the RX 6400 exceeded 180 s;
+    # 600 s covers the heaviest bounded profile without hanging forever.
+    inference_timeout_seconds: int = Field(default=600, ge=5, le=3600)
     max_concurrent_inference: int = Field(default=1, ge=1, le=4)
     # Context window requested per generation; 12 frames cost ~4k vision
     # tokens (docs/runtime-feasibility.md), so 8192 is the working default.
     inference_num_ctx: int = Field(default=8192, ge=1024, le=65536)
+    # Sprint 1 finding: thinking on is slower but noticeably more thorough on
+    # multi-part visual questions. Discussion defaults it on.
+    inference_think_enabled: bool = True
 
     # --- Media extraction ------------------------------------------------
     extraction_timeout_seconds: int = Field(default=120, ge=5, le=3600)

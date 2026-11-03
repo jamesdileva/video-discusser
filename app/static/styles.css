@@ -128,6 +128,8 @@ h2 {
 .chat-msg .who { color: var(--accent); font-weight: 600; }
 .chat-msg.system .who { color: var(--warn); }
 .chat-msg.system { color: var(--muted); }
+.chat-msg.discusser .who { color: var(--ok); }
+.chat-msg.discusser { white-space: pre-wrap; }
 
 #chat-form {
   display: flex;

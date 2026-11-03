@@ -56,3 +56,40 @@ class EvidencePreviewResponse(BaseModel):
     window: EvidenceWindow
     frames: list[FramePreview]
     warnings: list[str]
+
+
+class DiscussionRequest(BaseModel):
+    """`POST /api/discuss`. Sanity ceilings only — the service clamps to the
+    server's configured bounds (`MAX_QUESTION_CHARS`, window, frame cap)."""
+
+    question: str = Field(min_length=1, max_length=10000)
+    window_seconds: int | None = Field(default=None, ge=1, le=86400)
+    max_frames: int | None = Field(default=None, ge=1, le=10000)
+
+
+class FrameReference(BaseModel):
+    frame_id: str
+    timestamp_seconds: float
+    preview_url: str
+    width: int
+    height: int
+
+
+class DiscussionResponse(BaseModel):
+    """`POST /api/discuss` (docs/architecture.md §6). Tagged with the
+    snapshot revision the answer was built against; `revision_changed` is
+    True when the active video moved on during processing."""
+
+    request_id: str
+    answer: str
+    video_id: str
+    source: str
+    anchor_timestamp_seconds: float
+    window_start_seconds: float
+    window_end_seconds: float
+    frames_used: list[FrameReference]
+    warnings: list[str]
+    snapshot_revision: int
+    revision_changed: bool
+    model_id: str
+    elapsed_seconds: float

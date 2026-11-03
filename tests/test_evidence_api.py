@@ -158,7 +158,7 @@ def test_concurrent_preview_rejected_with_409(tmp_path: Path) -> None:
     client.post(
         "/api/sync/local-file", json={"path": str(media_root / "sample.mp4")}
     )
-    lock: threading.Lock = client.app.state.evidence_lock  # type: ignore[attr-defined]
+    lock: threading.Lock = client.app.state.pipeline_lock  # type: ignore[attr-defined]
     with lock:  # simulate another extraction in flight
         resp = client.post("/api/evidence/preview", json={"window_seconds": 30})
     assert resp.status_code == 409

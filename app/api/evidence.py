@@ -43,7 +43,7 @@ router = APIRouter(tags=["evidence"])
 
 
 def get_evidence_lock(request: Request) -> threading.Lock:
-    return request.app.state.evidence_lock
+    return request.app.state.pipeline_lock
 
 
 def get_settings_from_state(request: Request) -> Settings:

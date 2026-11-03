@@ -664,3 +664,83 @@ live-model test; skips cleanly on machines without the runtime). Live:
 the 4 GB GPU (Sprint 11 measures); concurrency (Sprint 10/12); multi-image
 ordering through the adapter (proven at the API level in Sprint 1, exercised
 by orchestration tests in Sprint 10).
+
+## 2026-11-03 — Sprint 10: Discussion orchestration and evidence-aware prompting
+
+**Goal:** Produce a response grounded in the frames selected for this request.
+
+**Plan & scope:** `DiscussionService` (snapshot → resolve → plan → extract →
+prompt → inference → revision tag), evidence-aware prompt templates,
+`POST /api/discuss` with structured errors, shared pipeline lock (renamed
+from `evidence_lock` — one extraction+inference job at a time), and dashboard
+chat wiring. Deferred: multi-turn chat history (Sprint 15), formal
+evaluation set (Sprint 11), response-section UI layout (Sprint 14).
+
+**What was done:**
+
+- `app/services/prompts.py` — system prompt encoding the §11 policy
+  (frames-only answering, observation vs interpretation separation,
+  supplied-timestamps-only citations, no audio/off-screen/identity/intent/
+  legality inference, in-video text and the question treated as content not
+  instructions, standing "not legal advice" line); user prompt lists ONLY
+  the timestamps actually extracted (post-EOF pull-back), so the model can
+  never cite a timestamp that was not in its input.
+- `app/services/discussion.py` — orchestration with question validation
+  (blank/over-length → `invalid_question`), clamped window/frames, revision
+  tagging (`revision_changed` reported, never relabelled), typed
+  `DiscussionError` codes; log line records frames, elapsed, token counts —
+  never the question text or URL.
+- `app/api/discussion.py` — `POST /api/discuss`; error mapping keeps
+  inference (`503/504/502 inference_*`) and media (`422/503 media_*`)
+  failures distinct; 409 `request_in_progress` under the pipeline lock.
+- `app/config.py` — `INFERENCE_THINK_ENABLED` (default true per the Sprint 1
+  quality finding).
+- Dashboard — chat submit now calls `/api/discuss`, renders the answer as a
+  chat message (textContent only), refreshes the evidence strip with the
+  frames actually used, shows a stale note when the video changed mid-answer,
+  and disables input with a "Thinking…" state while in flight.
+
+**Telemetry that changed the defaults (recorded for Sprint 11):**
+
+- 4 frames, thinking on: 89.1 s (493 prompt + 1165 eval tokens) — first
+  successful end-to-end answer.
+- 12 frames (dashboard default before the fix): exceeded the old 180 s
+  timeout → `INFERENCE_TIMEOUT_SECONDS` raised to 600 (bounded), and the
+  dashboard chat now sends `max_frames: 6` (live-conversation profile;
+  evidence preview keeps 12 for inspection).
+- 6 frames, thinking on, warm model: 84.7 s (573 + 1087 tokens) — generation
+  (~1100 tokens at ~18 tok/s) dominates; a future lever is shorter answers
+  or `think:false` for single-fact questions (Sprint 11 evaluates).
+
+**Verification (roadmap Sprint 10 checklist):**
+
+- [x] A mocked end-to-end request returns answer plus frame references
+  (RecordingInference over real FFmpeg extraction; previews served 200).
+- [x] Missing active video returns a useful 4xx (`400 no_active_video`).
+- [x] Model response cites only timestamps supplied to it — enforced by
+  prompt construction; unit test proves the prompt's timestamp list equals
+  exactly the response's frames_used labels.
+- [x] Unsupported questions are answered with limitations rather than
+  invented facts — policy is prompt-enforced (system rules 3-6); live answer
+  demonstrably listed "cannot be established" items (audio, meaning,
+  function) instead of guessing.
+- [x] A video change during inference does not relabel the old answer —
+  regression test syncs a new video inside a hooked generation; response
+  keeps `snapshot_revision=1` and reports `revision_changed=true`.
+- [x] Inference and media failures map to distinct error codes
+  (`inference_timeout` 504 vs `media_source_unavailable` 503, etc.).
+
+**Tests run:** `pytest` — 174 passed (165 prior + 9 new). Live: first real
+end-to-end answer (curl, 4 frames, 89.1 s, structured sections, correct
+per-frame digit readings, honest uncertainty list) and the dashboard chat
+flow (6 frames, 84.7 s, answer + frames + stale-safe tagging) verified in
+the browser with screenshots.
+
+**Notes:** the in-app browser's full-page screenshots tile (known capture
+quirk since Sprint 4); DOM state verified independently. Ollama updated to
+0.40.14 across the session restart without any adapter change — the
+version-independent `/api/chat` payload held.
+
+**Unverified / deferred:** multi-turn follow-ups reuse cached frames but
+have no server-side history (Sprint 15); formal quality evaluation on a
+varied test set is Sprint 11's whole purpose.
