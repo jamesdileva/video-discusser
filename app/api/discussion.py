@@ -12,6 +12,7 @@ import threading
 
 from fastapi import APIRouter, Depends, Request
 
+from app.api.deps import acquire_pipeline
 from app.api.errors import ApiError
 from app.api.sync import _media_error_status
 from app.schemas.discussion import (
@@ -57,7 +58,7 @@ async def post_discuss(
     lock: threading.Lock = Depends(get_pipeline_lock),
     service: DiscussionService = Depends(get_discussion_service),
 ) -> DiscussionResponse:
-    if not lock.acquire(blocking=False):
+    if not acquire_pipeline(lock):
         raise ApiError(
             409,
             "request_in_progress",

@@ -22,7 +22,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Request
 
 from app.adapters.media_source import MediaRequest, MediaSourceError
-from app.api.deps import get_active_video_service
+from app.api.deps import acquire_pipeline, get_active_video_service
 from app.api.errors import ApiError
 from app.api.frames import get_frame_store
 from app.api.sync import _media_error_status
@@ -71,7 +71,7 @@ async def preview_evidence(
             source_type="local_file", local_path=Path(snapshot.url)
         )
 
-    if not lock.acquire(blocking=False):
+    if not acquire_pipeline(lock):
         raise ApiError(
             409,
             "extraction_in_progress",

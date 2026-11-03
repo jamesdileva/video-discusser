@@ -807,3 +807,61 @@ Live: the evaluation IS the live run.
 
 **Unverified / deferred:** real-footage cases; `think:false` A/B; sub-second
 citation labels (Sprint 14 UI shows exact timestamps via thumbnails).
+
+## 2026-11-03 — Sprint 12: Reliability, concurrency, and cleanup
+
+**Goal:** Make failure recovery predictable.
+
+**Plan & scope:** cache size budget with active-file grace; bounded pipeline
+lock wait; stage-duration logging; concurrency corruption tests; repeated
+startup/shutdown. Deferred: a general inference retry (deliberate decision —
+the only known-transient case, the `think`-400, already retries once; blanket
+retries would double latency on real failures), UI cancel button (post-MVP),
+request cancellation on client disconnect (FastAPI limitation, documented).
+
+**What was done:**
+
+- `FrameStore.sweep()` replaces `sweep_stale()`: age expiry first, then a
+  total-size budget (`CACHE_MAX_BYTES`, 1 GiB default) with oldest-first
+  eviction. Batches younger than a 5-minute active grace are never removed
+  even when over budget — cleanup can never delete files an in-flight
+  request is using. Regression test: oldest evicted, active batch survives.
+- Pipeline lock: near-simultaneous jobs now wait up to 2 s for the single
+  slot before a structured 409 (bounded; no invisible request pile-up).
+  Discussion and evidence share the slot (`MAX_CONCURRENT_INFERENCE=1`
+  enforced at the app level).
+- Stage-duration logging in `DiscussionService` (`stage=resolve`, `stage=
+  extract` with cache-hit flag, `stage=infer`) — correlated by the request-ID
+  log filter; the evidence route logs extraction elapsed/cache-hit.
+- `HttpxInferenceTransport` is now self-healing: a client closed by a
+  previous lifecycle shutdown is recreated on demand. **Found by the new
+  lifespan test** — an in-process restart (`uvicorn --reload`, repeated
+  TestClient lifecycles) previously inherited a dead HTTP pool and every
+  later `/api/status` probe failed.
+
+**Verification (roadmap Sprint 12 checklist):**
+
+- [x] Two concurrent requests do not corrupt shared state — 20 concurrent
+  syncs across 8 threads produce exactly revisions 1–20 and a consistent
+  final snapshot; 3 concurrent previews end only in 200/409 with the store
+  consistent afterwards.
+- [x] A timed-out job does not leave FFmpeg running — `subprocess.run`
+  kill-and-reap covered by the Sprint 6 timeout test (30 s sleeper killed at
+  a 2 s budget); child-process discipline unchanged.
+- [x] Cache cleanup never removes active files — active-grace eviction test
+  (youngest batch survives an over-budget sweep; oldest evicted first).
+- [x] Logs correlate stages by request ID — stage logs flow through the
+  context-var filter (`[rid]`), verified in log output.
+- [x] The UI returns to a usable state after failures — covered by the
+  Sprint 8/10 browser verifications (error stages, re-enabled buttons) and
+  the 200/409-only concurrency test.
+- [x] Startup/shutdown repeated — 3 live uvicorn cycles (health + inference
+  ready each time) plus the in-process lifespan test that caught the pool
+  leak.
+
+**Tests run:** `pytest` — 179 passed (174 prior + 5 new/reworked). Live:
+3 startup/shutdown cycles; backend left running for the resting state.
+
+**Unverified / deferred:** true async cancellation on client disconnect
+(FastAPI/Starlette limitation — jobs run to completion; bounded timeouts cap
+the cost); disk-budget telemetry in the UI (Sprint 14).

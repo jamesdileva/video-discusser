@@ -124,12 +124,26 @@ class DiscussionService:
                 max_frames=frames_cap,
                 duration_seconds=resolved.duration_seconds,
             )
+            stage_resolve_ms = (time.perf_counter() - started) * 1000
+            LOGGER.info(
+                "stage=resolve elapsed_ms=%.0f video_id=%s source=%s",
+                stage_resolve_ms,
+                snapshot.video_id,
+                snapshot.source,
+            )
             batch = extract_frames(
                 resolved,
                 plan,
                 settings=self._settings,
                 source_revision=snapshot.revision,
                 store=self._frame_store,
+            )
+            stage_extract_ms = (time.perf_counter() - started) * 1000 - stage_resolve_ms
+            LOGGER.info(
+                "stage=extract elapsed_ms=%.0f cache_hit=%s frames=%d",
+                stage_extract_ms,
+                batch.cache_hit,
+                len(batch.frames),
             )
         except MediaSourceError as exc:
             raise DiscussionError(exc.code, exc.message) from exc
@@ -153,6 +167,11 @@ class DiscussionService:
             )
         except InferenceError as exc:
             raise DiscussionError(exc.code, exc.message) from exc
+        LOGGER.info(
+            "stage=infer elapsed_ms=%.0f model=%s",
+            (time.perf_counter() - started) * 1000 - stage_extract_ms - stage_resolve_ms,
+            result.model_id,
+        )
 
         # Tag, never relabel: if the active video moved on while we worked,
         # the answer still belongs to the snapshot it was built against.

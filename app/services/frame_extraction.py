@@ -34,6 +34,9 @@ FRAME_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 FRAMES_SUBDIR = "frames"
 STALE_FRAME_AGE_SECONDS = 24 * 3600
+# A batch younger than this is treated as potentially in-flight: age- and
+# size-based cleanup never touches it, even when the cache is over budget.
+ACTIVE_GRACE_SECONDS = 300
 
 
 class FrameExtractionError(Exception):
@@ -149,32 +152,86 @@ class FrameStore:
             loaded += len(records)
         return loaded
 
-    def sweep_stale(self, *, max_age_seconds: int = STALE_FRAME_AGE_SECONDS) -> int:
-        """Delete batch metadata (and their frame files) older than the age
-        bound. Entries younger than the bound — i.e. anything an in-flight
-        request could be using — are never touched. Returns batches removed."""
+    def sweep(
+        self,
+        *,
+        max_age_seconds: int = STALE_FRAME_AGE_SECONDS,
+        max_bytes: int | None = None,
+    ) -> int:
+        """Enforce the cache policy: age-based expiry, then (optionally) a
+        total-size budget with oldest-first eviction. Batches within the
+        active grace window are never removed — cleanup can never delete
+        files an in-flight request is using. Returns batches removed."""
         if not self._frames_dir.is_dir():
             return 0
         now = time.time()
-        removed = 0
-        for meta_path in list(self._frames_dir.glob("*.json")):
+
+        def batch_age(path: Path) -> float:
             try:
-                if now - meta_path.stat().st_mtime <= max_age_seconds:
-                    continue
-                data = json.loads(meta_path.read_text(encoding="utf-8"))
+                return now - path.stat().st_mtime
+            except OSError:
+                return 0.0  # unreadable metadata: leave it alone
+
+        def delete_batch(meta_path: Path, data: dict) -> bool:
+            try:
                 for item in data.get("frames", []):
                     relative = item.get("relative_path")
                     if isinstance(relative, str):
                         frame_file = (self._cache_root / relative).resolve()
-                        if frame_file.is_relative_to(self._cache_root.resolve()) and frame_file.is_file():
+                        if frame_file.is_relative_to(
+                            self._cache_root.resolve()
+                        ) and frame_file.is_file():
                             frame_file.unlink(missing_ok=True)
                 meta_path.unlink(missing_ok=True)
                 with self._lock:
                     for item in data.get("frames", []):
                         self._records.pop(item.get("frame_id"), None)
-                removed += 1
+                return True
             except (OSError, ValueError, json.JSONDecodeError):
-                continue
+                return False
+
+        def load(meta_path: Path) -> dict:
+            try:
+                return json.loads(meta_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, json.JSONDecodeError):
+                return {}
+
+        removed = 0
+        metas = sorted(self._frames_dir.glob("*.json"))
+
+        # 1) Age-based expiry.
+        for meta_path in metas:
+            data = load(meta_path)
+            if batch_age(meta_path) > max_age_seconds and delete_batch(meta_path, data):
+                removed += 1
+
+        # 2) Size budget: evict oldest-first, never within the active grace.
+        if max_bytes is not None:
+            def frame_size(path: Path) -> int:
+                try:
+                    return path.stat().st_size
+                except OSError:
+                    return 0
+
+            remaining = [m for m in metas if m.is_file()]
+            total = sum(
+                frame_size(p)
+                for p in self._frames_dir.iterdir()
+                if p.is_file()
+            )
+            remaining.sort(key=batch_age, reverse=True)  # oldest first
+            for meta_path in remaining:
+                if total <= max_bytes:
+                    break
+                if batch_age(meta_path) <= ACTIVE_GRACE_SECONDS:
+                    break  # active files are never evicted, budget or not
+                if delete_batch(meta_path, load(meta_path)):
+                    total -= sum(
+                        frame_size(p) for p in self._frames_dir.iterdir() if p.is_file()
+                    )
+                    # subtracting via re-scan is O(n²) worst case; batch counts
+                    # are small (dozens) and this runs opportunistically.
+                    removed += 1
         return removed
 
 
@@ -209,8 +266,9 @@ def extract_frames(
     frames_dir = store.frames_dir
     frames_dir.mkdir(parents=True, exist_ok=True)
 
-    # Opportunistic, age-bounded sweep — young entries are never touched.
-    store.sweep_stale()
+    # Opportunistic policy sweep — age expiry, then size budget. Young
+    # (potentially in-flight) batches are never touched.
+    store.sweep(max_bytes=settings.cache_max_bytes)
 
     meta_path = frames_dir / f"{cache_key}.json"
     if meta_path.is_file():

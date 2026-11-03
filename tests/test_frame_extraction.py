@@ -217,7 +217,7 @@ def test_stale_sweep_removes_only_old_batches(tmp_path: Path) -> None:
 
     os.utime(meta, (old, old))
 
-    removed = store.sweep_stale()
+    removed = store.sweep()
     assert removed == 1
     assert store.get(batch.frames[0].frame_id) is None
     assert not meta.exists()
@@ -226,8 +226,56 @@ def test_stale_sweep_removes_only_old_batches(tmp_path: Path) -> None:
 
     # A fresh batch survives the sweep.
     fresh_batch = extract_frames(resolved, plan, settings=settings, source_revision=1, store=store)
-    assert store.sweep_stale() == 0
+    assert store.sweep() == 0
     assert store.get(fresh_batch.frames[0].frame_id) is not None
+
+
+def test_size_budget_evicts_oldest_first_never_active(tmp_path: Path) -> None:
+    """Three batches; the size budget forces eviction. Oldest go first; the
+    youngest (potentially in-flight) batch is never deleted, even while the
+    cache remains over budget."""
+    import os
+
+    settings = make_settings(tmp_path)
+    store = FrameStore(settings.cache_dir)
+    resolved = resolved_fixture(tmp_path)
+
+    def make_batch(anchor: float):
+        plan = plan_frame_timestamps(
+            anchor_seconds=anchor, window_seconds=180.0, max_frames=2, duration_seconds=10.0
+        )
+        return extract_frames(
+            resolved, plan, settings=settings, source_revision=1, store=store
+        )
+
+    batch_old, batch_mid, batch_new = make_batch(4.0), make_batch(5.0), make_batch(6.0)
+    metas = sorted((settings.cache_dir / "frames").glob("*.json"), key=lambda p: p.name)
+    assert len(metas) == 3
+
+    # Backdate two of the three beyond the active grace; leave the newest active.
+    old, mid = metas[0], metas[1]
+    for meta in (old, mid):
+        backdated = meta.stat().st_mtime - (3600 * 2)
+        os.utime(meta, (backdated, backdated))
+        # frame files must share the old mtime so re-scans see them as old too
+        for record in (batch_old if meta is old else batch_mid).frames:
+            f = settings.cache_dir / record.relative_path
+            os.utime(f, (backdated, backdated))
+
+    # Budget smaller than two batches → oldest evicted until under budget or
+    # only active files remain.
+    one_batch_bytes = sum(
+        p.stat().st_size for p in (settings.cache_dir / "frames").iterdir() if p.is_file()
+    ) // 3
+    removed = store.sweep(max_age_seconds=24 * 3600, max_bytes=one_batch_bytes)
+
+    assert removed >= 1
+    # The oldest batch is gone.
+    assert store.get(batch_old.frames[0].frame_id) is None
+    assert not (settings.cache_dir / batch_old.frames[0].relative_path).exists()
+    # The newest (active-grace) batch survives even if the budget is still exceeded.
+    assert store.get(batch_new.frames[0].frame_id) is not None
+    assert (settings.cache_dir / batch_new.frames[0].relative_path).exists()
 
 
 def test_store_reloads_from_disk_after_restart(tmp_path: Path) -> None:

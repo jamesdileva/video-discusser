@@ -79,19 +79,28 @@ class InferenceTransport(Protocol):
 
 
 class HttpxInferenceTransport:
-    """Production transport: one pooled httpx client to the loopback runtime."""
+    """Production transport: a pooled httpx client to the loopback runtime.
+
+    The client is recreated if it was closed by a previous lifecycle
+    shutdown (uvicorn --reload, in-process restarts) — a shut-down pool must
+    not poison the next lifecycle."""
 
     def __init__(self) -> None:
         self._client = httpx.Client()
 
+    def _pool(self) -> httpx.Client:
+        if self._client.is_closed:
+            self._client = httpx.Client()
+        return self._client
+
     def get_json(self, url: str, timeout_seconds: float) -> tuple[int, dict]:
-        response = self._client.get(url, timeout=timeout_seconds)
+        response = self._pool().get(url, timeout=timeout_seconds)
         return response.status_code, response.json()
 
     def post_json(
         self, url: str, payload: dict, timeout_seconds: float
     ) -> tuple[int, dict]:
-        response = self._client.post(url, json=payload, timeout=timeout_seconds)
+        response = self._pool().post(url, json=payload, timeout=timeout_seconds)
         return response.status_code, response.json()
 
     def close(self) -> None:

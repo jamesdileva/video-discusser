@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     # --- Media extraction ------------------------------------------------
     extraction_timeout_seconds: int = Field(default=120, ge=5, le=3600)
     cache_dir: Path = Path("./data/cache")
+    # Total size budget for cached frames (oldest-first eviction; batches in
+    # active use are never evicted). 1 GiB default.
+    cache_max_bytes: int = Field(default=1073741824, ge=10485760, le=107374182400)
 
     # --- Media sources ------------------------------------------------------
     # Semicolon-separated allowlist of directories the local-file source may
