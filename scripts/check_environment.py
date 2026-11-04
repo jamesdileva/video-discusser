@@ -234,6 +234,38 @@ def run_preflight() -> bool:
         except (httpx.HTTPError, ValueError):
             report(WARN, "Model check", "runtime did not report a model list")
 
+        # Runtime binding: Ollama's default listens on all interfaces, which
+        # exposes the model to the LAN. Detect and instruct.
+        lan_reachable = False
+        try:
+            hostname = socket.gethostname()
+            lan_ips = {
+                info[4][0]
+                for info in socket.getaddrinfo(hostname, None)
+                if info[0] == socket.AF_INET and not info[4][0].startswith("127.")
+            }
+            for ip in lan_ips:
+                probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                probe.settimeout(1.0)
+                try:
+                    lan_reachable = (
+                        probe.connect_ex((ip, urlparse(settings.inference_base_url).port or 11434))
+                        == 0
+                    ) or lan_reachable
+                finally:
+                    probe.close()
+        except OSError:
+            pass
+        if lan_reachable:
+            report(
+                WARN,
+                "Model runtime binding",
+                "reachable on a LAN address — restrict it with OLLAMA_HOST=127.0.0.1 "
+                "(Windows: setx OLLAMA_HOST 127.0.0.1, then restart Ollama)",
+            )
+        else:
+            report(OK, "Model runtime binding", "loopback-only (or LAN unreachable)")
+
     print(f"\nResult: {'OK' if _required_ok else 'FAIL'}")
     return _required_ok
 

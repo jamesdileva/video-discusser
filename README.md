@@ -90,7 +90,11 @@ question text, or local paths).
 ```powershell
 ollama serve          # if Ollama is not already running
 ollama pull qwen3.5:4b
+setx OLLAMA_HOST 127.0.0.1   # keep the model runtime off the LAN; restart Ollama after
 ```
+
+By default Ollama listens on **all interfaces** — the `setx` above restricts
+it to your machine only (the preflight checks this and warns).
 
 ### 6. Start the backend
 
@@ -153,6 +157,33 @@ explicit concern either way.
 - [`docs/new-idea.md`](docs/new-idea.md) — proposed whole-video summary mode (deferred)
 - [`AGENTS.md`](AGENTS.md) — working conventions for agents and contributors
 - [`docs/dev-log.md`](docs/dev-log.md) — sprint-by-sprint work log
+
+## Known limitations (release candidate)
+
+Honest boundaries of `v0.1.0-rc1`, from the [evaluation report](docs/evaluation-report.md)
+and the [dev log](docs/dev-log.md):
+
+- **Speed.** Answers take ~30–240 s on the target hardware (4 GB VRAM,
+  thinking mode; generation length varies between runs). No streaming —
+  the dashboard polls until the answer lands.
+- **Sampling gaps, by design.** Only sampled still frames are analyzed;
+  events between frames and all audio are invisible to the model (the UI
+  says so on every answer). Denser sampling around a chosen moment is a
+  planned post-MVP feature.
+- **Evaluation coverage is synthetic.** The fixed test set uses generated
+  clips with controlled ground truth. Real-footage cases need lawful local
+  media or the opt-in YouTube source and are still pending.
+- **YouTube round-trip is harness-verified only.** Every pipeline stage up
+  to Tampermonkey itself is automated-tested; the real userscript checklist
+  ([browser/README.md](browser/README.md)) is a manual step on your machine.
+- **Minute-precision citations.** The model cites `[m:ss]` labels; exact
+  timestamps appear on the thumbnails.
+- **Single-user assumptions.** No authentication, no multi-instance
+  coordination beyond the single-job pipeline lock. Loopback-only by
+  design — do not expose it to a network.
+- **Not legal advice, ever.** The model separates observations from
+  interpretation and refuses legal conclusions, but it is still a local
+  vision model reading sparse frames — always review the original footage.
 
 ## Privacy
 
