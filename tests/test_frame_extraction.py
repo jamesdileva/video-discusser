@@ -111,6 +111,44 @@ def test_scales_down_large_source_preserving_aspect(tmp_path: Path) -> None:
     assert all(record.height == 432 for record in batch.frames)  # 16:9 preserved
 
 
+def test_portrait_video_respects_max_dimension_on_both_axes(tmp_path: Path) -> None:
+    """Audit C3: width-only scaling let portrait phone footage produce
+    frames far above the configured pixel budget."""
+    portrait = tmp_path / "video" / "portrait.mp4"
+    portrait.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            shutil.which("ffmpeg") or "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=720x1280:rate=10:duration=3",
+            "-pix_fmt",
+            "yuv420p",
+            "-y",
+            str(portrait),
+        ],
+        check=True,
+        timeout=120,
+    )
+    settings = make_settings(tmp_path)
+    store = FrameStore(settings.cache_dir)
+    resolved = ResolvedMedia(
+        path=portrait, source_type="local_file", duration_seconds=3.0, title="portrait.mp4"
+    )
+    plan = plan_frame_timestamps(anchor_seconds=3.0, window_seconds=180.0, max_frames=2, duration_seconds=3.0)
+    batch = extract_frames(resolved, plan, settings=settings, source_revision=1, store=store)
+    assert batch.frames
+    for record in batch.frames:
+        assert record.width <= settings.max_frame_dimension
+        assert record.height <= settings.max_frame_dimension
+    # aspect preserved: 720x1280 → 432x768 (height is the limiting axis)
+    assert (record.width, record.height) == (432, 768)
+
+
 def test_anchor_at_eof_is_clamped_and_extracts(tmp_path: Path) -> None:
     settings = make_settings(tmp_path)
     store = FrameStore(settings.cache_dir)

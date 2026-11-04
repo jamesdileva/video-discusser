@@ -307,11 +307,12 @@
     function attemptSync(syncSource) {
       try {
         // location.href is always fresh — YouTube is a SPA. __vdTestHref is a
-        // harness-only seam (undefined in production); a page could spoof the
-        // reported URL with it, but the page already controls its own video
-        // element, so this grants no new capability.
+        // harness-only seam, accepted ONLY when the page itself is served
+        // from the backend origin (audit S10): on youtube.com the page must
+        // never be able to choose what gets synced.
+        const harnessAllowed = window.location.origin === BACKEND_ORIGIN;
         const href =
-          typeof window.__vdTestHref === "function"
+          harnessAllowed && typeof window.__vdTestHref === "function"
             ? window.__vdTestHref()
             : window.location.href;
         const video = findMainVideo();

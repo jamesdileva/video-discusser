@@ -53,6 +53,9 @@ class ResolvedMedia:
     # Downloaded streams are temporary: callers should delete the file when
     # done unless the user opted into retention.
     cleanup_after_use: bool = False
+    # Stable cache identity for sources whose filename is incidental (e.g.
+    # UUID-named downloads). Falls back to the path name when None.
+    cache_identity: str | None = None
 
 
 @runtime_checkable

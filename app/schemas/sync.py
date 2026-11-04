@@ -72,8 +72,12 @@ class LocalFileSyncPayload(BaseModel):
 
     @field_validator("path")
     @classmethod
-    def _reject_blank_path(cls, value: str) -> str:
+    def _reject_blank_and_device_paths(cls, value: str) -> str:
         value = value.strip().strip('"')
         if not value:
             raise ValueError("path must not be blank")
+        # UNC/device paths trigger network authentication and device probes
+        # for a purely local tool (audit S13).
+        if value.startswith("\\\\"):
+            raise ValueError("UNC and device paths are not supported; use a local drive path.")
         return value

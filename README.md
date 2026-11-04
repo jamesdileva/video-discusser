@@ -164,6 +164,7 @@ explicit concern either way.
 - [`browser/README.md`](browser/README.md) — userscript setup and the manual test checklist
 - [`docs/new-idea.md`](docs/new-idea.md) — proposed whole-video summary mode (deferred)
 - [`AGENTS.md`](AGENTS.md) — working conventions for agents and contributors
+- [`docs/audit-2026-11-04.md`](docs/audit-2026-11-04.md) — pre-release adversarial audit (found → fixed)
 - [`docs/dev-log.md`](docs/dev-log.md) — sprint-by-sprint work log
 
 ## Known limitations (release candidate)

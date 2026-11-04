@@ -33,6 +33,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import Settings
 
 CLIENT_MARKER_HEADER = "x-video-discusser-client"
+CLIENT_MARKER_VALUE = "userscript"  # presence-only checks are sloppy (audit S8)
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
@@ -42,28 +43,59 @@ def _is_loopback(hostname: str | None) -> bool:
     return hostname.strip("[]").lower().rstrip(".") in _LOOPBACK_HOSTS
 
 
-class PayloadLimitMiddleware(BaseHTTPMiddleware):
-    """Reject oversized bodies with a structured 413 before parsing. Bodies
-    without Content-Length (chunked) pass — schema validation bounds them and
-    the server is loopback-only."""
+class PayloadLimitMiddleware:
+    """Reject oversized request bodies with a structured 413.
+
+    Pure-ASGI and framing-independent: the body is read and counted up to
+    `max_bytes + 1` bytes BEFORE the app sees it, so chunked encoding cannot
+    bypass the cap (audit S1) and memory stays bounded regardless of what
+    the client declares. Bodies within the limit are replayed to the app.
+    GET/HEAD/OPTIONS pass through untouched.
+    """
 
     def __init__(self, app, max_bytes: int) -> None:  # type: ignore[no-untyped-def]
-        super().__init__(app)
+        self.app = app
         self._max_bytes = max_bytes
 
-    async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
-        content_length = request.headers.get("content-length")
-        if content_length and content_length.isdigit() and int(content_length) > self._max_bytes:
-            return JSONResponse(
-                status_code=413,
-                content={
-                    "error": {
-                        "code": "payload_too_large",
-                        "message": f"Request body exceeds {self._max_bytes} bytes.",
-                    }
-                },
-            )
-        return await call_next(request)
+    async def __call__(self, scope, receive, send) -> None:  # type: ignore[no-untyped-def]
+        if scope["type"] != "http" or scope["method"] in ("GET", "HEAD", "OPTIONS"):
+            await self.app(scope, receive, send)
+            return
+
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            body += message.get("body", b"")
+            if len(body) > self._max_bytes:
+                response = JSONResponse(
+                    status_code=413,
+                    content={
+                        "error": {
+                            "code": "payload_too_large",
+                            "message": f"Request body exceeds {self._max_bytes} bytes.",
+                        }
+                    },
+                )
+                await response(scope, receive, send)
+                return
+            if not message.get("more_body", False):
+                break
+
+        full_body = bytes(body)
+
+        async def replay_receive():  # type: ignore[no-untyped-def]
+            # Proper ASGI receive: the buffered body once, then a disconnect
+            # signal for any further probe.
+            nonlocal body_sent
+            if not body_sent:
+                body_sent = True
+                return {"type": "http.request", "body": full_body, "more_body": False}
+            return {"type": "http.disconnect"}
+
+        body_sent = False
+        await self.app(scope, replay_receive, send)
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
@@ -73,24 +105,35 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
     def _allowed_origins(self) -> set[str]:
         port = self._settings.app_port
-        return {f"http://{host}:{port}" for host in _LOOPBACK_HOSTS}
+        # IPv6 literals must be bracketed in origins (audit C8).
+        return {
+            f"http://{(f'[{h}]' if ':' in h else h)}:{port}"
+            for h in _LOOPBACK_HOSTS
+        }
 
     async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
-        # 1) Host: the door DNS rebinding walks through.
+        # 1) Host: the door DNS rebinding walks through. Syntactically
+        #    impossible hosts are rejected outright so future parser changes
+        #    stay tight (audit S12).
         host_header = request.headers.get("host", "")
+        if any(ch in host_header for ch in ("#", "%", ",")) or (
+            host_header.count(":") > 1 and not host_header.startswith("[")
+        ):
+            return self._forbidden("Unrecognized Host header.")
         host_name = urlparse(f"http://{host_header}").hostname if host_header else ""
         if not _is_loopback(host_name):
             return self._forbidden("Unrecognized Host header.")
 
         # 2) Origin: dashboard origins pass; foreign origins need the marker
-        #    that only extension-privileged clients can attach.
+        #    with its exact expected value (audit S8 — presence-only checks
+        #    accept an empty header, which is meaningless).
         origin = request.headers.get("origin")
         if origin:
             parsed = urlparse(origin)
             if _is_loopback(parsed.hostname):
                 if origin.rstrip("/") not in self._allowed_origins():
                     return self._forbidden("Origin is not an allowed dashboard origin.")
-            elif request.headers.get(CLIENT_MARKER_HEADER) is None:
+            elif request.headers.get(CLIENT_MARKER_HEADER) != CLIENT_MARKER_VALUE:
                 return self._forbidden("Cross-origin requests require the local companion client.")
 
         response = await call_next(request)

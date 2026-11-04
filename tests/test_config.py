@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.config import Settings
+from app.main import create_app
 
 
 def test_defaults_are_valid_and_secure() -> None:
@@ -18,6 +19,26 @@ def test_defaults_are_valid_and_secure() -> None:
     assert ":8000" not in s.inference_base_url
     assert 1 <= s.max_frames_per_request <= 45
     assert 5 <= s.analysis_window_seconds <= 3600
+
+
+def test_production_is_the_safe_default() -> None:
+    """Audit S5: dev-only fixture routes must be opt-in, not default."""
+    assert Settings(_env_file=None).app_env == "production"  # type: ignore[call-arg]
+
+
+def test_dev_routes_registered_only_in_development(tmp_path) -> None:
+    from fastapi.testclient import TestClient as _BaseClient
+
+    for env, expected in (("production", 404), ("development", 200)):
+        settings = Settings(
+            app_env=env,
+            cache_dir=tmp_path / f"cache-{env}",
+            _env_file=None,  # type: ignore[call-arg]
+        )
+        # Raw client (not the loopback conftest one) — Host is not the focus.
+        client = _BaseClient(create_app(settings), base_url="http://127.0.0.1:8000")
+        resp = client.get("/dev/youtube-sync.user.js")
+        assert resp.status_code == expected, f"APP_ENV={env}"
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.10", "example.com"])
@@ -57,7 +78,6 @@ def test_port_collision_rejected() -> None:
         ("app_port", 0),
         ("app_port", 70000),
         ("max_question_chars", 10001),
-        ("max_concurrent_inference", 5),
     ],
 )
 def test_hard_bounds_enforced(field: str, value: int) -> None:

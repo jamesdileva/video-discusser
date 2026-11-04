@@ -187,7 +187,10 @@ class SessionStore:
                      window_start_seconds, window_end_seconds, frames_json),
                 )
             return session_id
-        except sqlite3.Error as exc:
+        except (sqlite3.Error, UnicodeEncodeError) as exc:
+            # UnicodeEncodeError is raised for strings containing lone
+            # surrogates (audit C9) — record nothing rather than lose an
+            # already-computed answer to an unhandled exception.
             LOGGER.error("failed to record discussion: %s", exc)
             return None
 
@@ -332,7 +335,11 @@ class SessionStore:
 
     def delete_session(self, session_id: str) -> list[str]:
         """Delete one session; returns the frame IDs it referenced (callers
-        decide which cached files are still eligible for removal)."""
+        decide which cached files are still eligible for removal). A WAL
+        checkpoint truncates the log afterwards (outside the write
+        transaction — SQLite forbids checkpoints mid-transaction) so deleted
+        question text and answers do not linger recoverable on disk
+        (audit S2)."""
         if not self._enabled or self._conn is None:
             raise SessionStoreError("sessions_disabled", "Session history is disabled.")
         frame_ids = self.frame_ids_in_session(session_id)
@@ -342,13 +349,19 @@ class SessionStore:
             )
             if cursor.rowcount == 0:
                 raise SessionStoreError("session_not_found", "Unknown session.")
+        self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         return frame_ids
 
     def clear_all(self) -> int:
-        """Delete every session. Returns how many sessions were removed."""
+        """Delete every session and compact the database file, so nothing
+        recoverable remains on disk. Returns how many sessions were removed."""
         if not self._enabled or self._conn is None:
             raise SessionStoreError("sessions_disabled", "Session history is disabled.")
         with self._lock, self._conn:
             count = self._conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
             self._conn.execute("DELETE FROM sessions")
+        # VACUUM and the truncating checkpoint must run outside the implicit
+        # transaction (audit S2).
+        self._conn.execute("VACUUM")
+        self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         return count

@@ -8,9 +8,11 @@ records and any cached frames no longer referenced by other sessions."""
 from __future__ import annotations
 
 import logging
+import threading
 
 from fastapi import APIRouter, Depends, Request
 
+from app.api.deps import acquire_pipeline
 from app.api.errors import ApiError
 from app.services.session_store import SessionStore, SessionStoreError
 
@@ -21,6 +23,13 @@ router = APIRouter(tags=["sessions"])
 
 def get_session_store(request: Request) -> SessionStore:
     return request.app.state.session_store
+
+
+def get_pipeline_lock(request: Request) -> threading.Lock:
+    """Deletion shares the pipeline lock: unlinking cached frames while a
+    discussion is mid-flight would waste the inference and surface misleading
+    errors (audit C5)."""
+    return request.app.state.pipeline_lock
 
 
 def _error_status(code: str) -> int:
@@ -93,36 +102,56 @@ def delete_session(
     session_id: str,
     request: Request,
     store: SessionStore = Depends(get_session_store),
+    lock: threading.Lock = Depends(get_pipeline_lock),
 ) -> dict:
+    if not acquire_pipeline(lock):
+        raise ApiError(
+            409,
+            "request_in_progress",
+            "A discussion or extraction is running — deletion waits for it to finish.",
+        )
     try:
-        deleted_frame_ids = store.delete_session(session_id)
-    except SessionStoreError as exc:
-        raise _map_store_error(exc) from exc
+        try:
+            deleted_frame_ids = store.delete_session(session_id)
+        except SessionStoreError as exc:
+            raise _map_store_error(exc) from exc
 
-    # Cache eligibility: remove frames this session referenced unless another
-    # session still references them.
-    still_referenced = store.referenced_frame_ids()
-    removable = [fid for fid in deleted_frame_ids if fid not in still_referenced]
-    removed_files = request.app.state.frame_store.delete_frames(removable)
-    LOGGER.info(
-        "session deleted id=%s frames_released=%d files_removed=%d",
-        session_id,
-        len(deleted_frame_ids),
-        removed_files,
-    )
-    return {"deleted": session_id, "frames_removed": removed_files}
+        # Cache eligibility: remove frames this session referenced unless another
+        # session still references them.
+        still_referenced = store.referenced_frame_ids()
+        removable = [fid for fid in deleted_frame_ids if fid not in still_referenced]
+        removed_files = request.app.state.frame_store.delete_frames(removable)
+        LOGGER.info(
+            "session deleted id=%s frames_released=%d files_removed=%d",
+            session_id,
+            len(deleted_frame_ids),
+            removed_files,
+        )
+        return {"deleted": session_id, "frames_removed": removed_files}
+    finally:
+        lock.release()
 
 
 @router.delete("/api/sessions")
 def clear_sessions(
     request: Request,
     store: SessionStore = Depends(get_session_store),
+    lock: threading.Lock = Depends(get_pipeline_lock),
 ) -> dict:
-    removed_sessions = store.clear_all()
-    # With no sessions left, no frames are referenced by history; the cache
-    # itself remains governed by its own age/size policy.
-    removed_files = request.app.state.frame_store.delete_frames(
-        list(request.app.state.frame_store.registered_frame_ids())
-    )
-    LOGGER.info("all sessions cleared (%d); cache frames removed=%d", removed_sessions, removed_files)
-    return {"cleared_sessions": removed_sessions, "frames_removed": removed_files}
+    if not acquire_pipeline(lock):
+        raise ApiError(
+            409,
+            "request_in_progress",
+            "A discussion or extraction is running — clearing waits for it to finish.",
+        )
+    try:
+        removed_sessions = store.clear_all()
+        # With no sessions left, no frames are referenced by history; the cache
+        # itself remains governed by its own age/size policy.
+        removed_files = request.app.state.frame_store.delete_frames(
+            list(request.app.state.frame_store.registered_frame_ids())
+        )
+        LOGGER.info("all sessions cleared (%d); cache frames removed=%d", removed_sessions, removed_files)
+        return {"cleared_sessions": removed_sessions, "frames_removed": removed_files}
+    finally:
+        lock.release()

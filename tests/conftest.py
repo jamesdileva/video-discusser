@@ -21,8 +21,11 @@ class TestClient(_FastAPITestClient):
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    """Valid settings isolated from the developer's real `.env` and cache."""
+    """Valid settings isolated from the developer's real `.env` and cache.
+    app_env is explicitly development — several test modules exercise the
+    dev-only fixture routes deliberately."""
     return Settings(
+        app_env="development",
         cache_dir=tmp_path / "cache",
         _env_file=None,  # type: ignore[call-arg]  # ignore any local .env
     )

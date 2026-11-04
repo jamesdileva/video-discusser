@@ -133,13 +133,22 @@ class DiscussionService:
                 snapshot.video_id,
                 snapshot.source,
             )
-            batch = extract_frames(
-                resolved,
-                plan,
-                settings=self._settings,
-                source_revision=snapshot.revision,
-                store=self._frame_store,
-            )
+            try:
+                batch = extract_frames(
+                    resolved,
+                    plan,
+                    settings=self._settings,
+                    source_revision=snapshot.revision,
+                    store=self._frame_store,
+                )
+            finally:
+                # Downloads are temporary by contract — delete the file once
+                # extraction no longer needs it, whatever the outcome.
+                if resolved.cleanup_after_use:
+                    try:
+                        resolved.path.unlink(missing_ok=True)
+                    except OSError as exc:
+                        LOGGER.warning("could not remove download %s: %s", resolved.path.name, exc)
             stage_extract_ms = (time.perf_counter() - started) * 1000 - stage_resolve_ms
             LOGGER.info(
                 "stage=extract elapsed_ms=%.0f cache_hit=%s frames=%d",

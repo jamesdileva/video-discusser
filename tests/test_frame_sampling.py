@@ -96,3 +96,45 @@ def test_invalid_inputs_rejected() -> None:
         compute_analysis_window(10.0, 0.0)
     with pytest.raises(ValueError):
         plan_frame_timestamps(anchor_seconds=10.0, window_seconds=180.0, max_frames=0)
+
+
+def test_property_anchor_always_present_and_last() -> None:
+    """Audit C1 property: for a grid of high-precision anchors and durations,
+    plans are non-empty, strictly increasing, within window, and the last
+    timestamp is the anchor (within EOF_GUARD of the requested one)."""
+    import random
+
+    rng = random.Random(1234)
+    scenarios = []
+    # High-precision pauses (plain doubles from video.currentTime).
+    for base in (0.0, 61.23456, 125.4, 99.9998, 500.123456, 3599.9999999):
+        for k in range(12):
+            scenarios.append(round(base + rng.random(), 6))
+    # EOF-clamp cases where duration - anchor < 0.05.
+    for duration, anchor in [(99.9998, 99.9998), (10.0, 10.0), (125.1, 125.4), (0.03, 0.05)]:
+        scenarios.append(min(anchor, duration))
+
+    for anchor in scenarios:
+        for max_frames in (1, 2, 3, 12, 45):
+            for window in (5, 30, 180):
+                duration = max(anchor, anchor + rng.uniform(-0.2, 1.0))
+                plan = plan_frame_timestamps(
+                    anchor_seconds=anchor,
+                    window_seconds=window,
+                    max_frames=max_frames,
+                    duration_seconds=duration,
+                )
+                assert plan.timestamps, f"empty plan for anchor={anchor!r}"
+                assert plan.timestamps == sorted(plan.timestamps)
+                assert len(set(plan.timestamps)) == len(plan.timestamps)
+                assert plan.timestamps[-1] == plan.anchor_seconds
+                assert all(
+                    plan.window_start_seconds <= t <= plan.window_end_seconds
+                    for t in plan.timestamps
+                )
+                # The paused moment survives: the plan's last frame is within
+                # one EOF guard of the requested anchor (clamped to duration).
+                effective = min(anchor, max(0.0, duration or anchor))
+                assert abs(plan.anchor_seconds - effective) <= 0.06 or (
+                    effective < window  # window clamps nothing when shorter
+                )

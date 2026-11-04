@@ -12,6 +12,7 @@ Boundaries established here:
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -72,10 +73,15 @@ def configure_logging(level: int = logging.INFO) -> None:
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
-    """Assigns (or adopts) a request ID for every request."""
+    """Assigns (or adopts) a request ID for every request. Client-supplied
+    IDs are accepted only in a strict format — log forging via arbitrary
+    header values would undermine structured logging (audit S9)."""
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        rid = request.headers.get("x-request-id") or uuid4().hex
+    _CLIENT_ID_RE = re.compile(r"^[0-9a-f-]{8,64}$")
+
+    async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
+        supplied = request.headers.get("x-request-id") or ""
+        rid = supplied if self._CLIENT_ID_RE.match(supplied) else uuid4().hex
         token = _request_id.set(rid)
         LOGGER.debug("%s %s", request.method, request.url.path)
         try:

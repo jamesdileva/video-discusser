@@ -24,7 +24,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["app", "app.api", "app.schemas"]
+packages = ["app", "app.adapters", "app.api", "app.schemas", "app.services"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

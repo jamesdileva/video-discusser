@@ -64,25 +64,30 @@ def plan_frame_timestamps(
     duration_seconds: float | None = None,
 ) -> SamplingPlan:
     """Build the sampling plan. Never returns more than `max_frames`
-    timestamps, no matter the inputs."""
+    timestamps, no matter the inputs. The anchor (the paused moment) is
+    always present and always last — rounding may never push it outside the
+    clamped window."""
     if max_frames < 1:
         raise ValueError("max_frames must be at least 1")
     start, end = compute_analysis_window(
         anchor_seconds, window_seconds, duration_seconds=duration_seconds
     )
-    anchor = round(end, 3)  # the pause point, clamped to the EOF guard
+    # Clamp the anchor to the window WITHOUT rounding above `end`: a plain
+    # round() can round up (e.g. 61.23456 → 61.235 > end), which used to
+    # leave the anchor outside the window filter — silently dropping the
+    # paused frame, the core evidence of the whole request.
+    anchor = min(round(end, 3), end)
 
     if max_frames == 1 or end - start <= 0:
         timestamps = [anchor]
     else:
         step = (end - start) / (max_frames - 1)
         spread = [round(start + step * i, 3) for i in range(max_frames - 1)]
-        # The anchor replaces the last even point (it is the closest one to
-        # the pause); rounding may merge near-duplicates, which only reduces
-        # the count — the cap is a maximum, never a promise.
+        # Only spread points are filtered; the anchor is appended after, so
+        # it can never be dropped, and it always sorts last.
+        spread = [t for t in spread if start <= t < anchor]
         timestamps = sorted({*spread, anchor})
 
-    timestamps = [t for t in timestamps if start <= t <= end]
     return SamplingPlan(
         window_start_seconds=start,
         window_end_seconds=end,

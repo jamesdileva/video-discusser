@@ -38,7 +38,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_env: str = "development"
+    # "production" is the safe default: development-only fixture routes (the
+    # userscript test harness) are registered only in "development", which
+    # contributors set explicitly in their local .env.
+    app_env: str = "production"
 
     # --- Backend server -------------------------------------------------
     # Loopback-only by design; see docs/architecture.md §13.
@@ -51,7 +54,6 @@ class Settings(BaseSettings):
     # Sprint 10 telemetry: 12 frames + thinking on the RX 6400 exceeded 180 s;
     # 600 s covers the heaviest bounded profile without hanging forever.
     inference_timeout_seconds: int = Field(default=600, ge=5, le=3600)
-    max_concurrent_inference: int = Field(default=1, ge=1, le=4)
     # Context window requested per generation; 12 frames cost ~4k vision
     # tokens (docs/runtime-feasibility.md), so 8192 is the working default.
     inference_num_ctx: int = Field(default=8192, ge=1024, le=65536)
@@ -82,13 +84,11 @@ class Settings(BaseSettings):
     # --- Frame & window budgets (server clamps requests to these) -------
     analysis_window_seconds: int = Field(default=180, ge=5, le=3600)
     max_frames_per_request: int = Field(default=12, ge=1, le=45)
-    frame_sample_interval_seconds: int = Field(default=15, ge=1, le=3600)
     max_frame_dimension: int = Field(default=768, ge=128, le=2048)
     jpeg_quality: int = Field(default=80, ge=1, le=100)
 
     # --- Input bounds ------------------------------------------------------
     max_question_chars: int = Field(default=2000, ge=1, le=10000)
-    max_chat_turns: int = Field(default=8, ge=1, le=50)
 
     # --- Local hardening (docs/architecture.md §13) -------------------------
     # Maximum accepted request body size; anything larger is rejected with a

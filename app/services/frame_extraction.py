@@ -93,13 +93,17 @@ def _quality_to_qscale(jpeg_quality: int) -> int:
 
 
 def _source_identity(resolved: ResolvedMedia) -> str:
-    """A stable identity for cache keys without hashing the whole file:
-    kind + filename + size + duration."""
+    """A stable identity for cache keys without hashing the whole file.
+    Downloads use an explicit `cache_identity` and skip the file size —
+    re-downloads of the same video can differ by bytes, and the cache must
+    still hit (audit C4)."""
+    duration = f"{resolved.duration_seconds:.3f}" if resolved.duration_seconds is not None else "?"
+    if resolved.cache_identity:
+        return f"{resolved.source_type}:{resolved.cache_identity}:{duration}"
     try:
         size = resolved.path.stat().st_size
     except OSError:
         size = -1
-    duration = f"{resolved.duration_seconds:.3f}" if resolved.duration_seconds is not None else "?"
     return f"{resolved.source_type}:{resolved.path.name}:{size}:{duration}"
 
 
@@ -315,7 +319,15 @@ def extract_frames(
     warnings: list[str] = []
     records: list[FrameRecord] = []
     qscale = str(_quality_to_qscale(settings.jpeg_quality))
-    scale_filter = f"scale=w='min(iw,{settings.max_frame_dimension})':h=-2"
+    # Both axes are bounded (audit C3): width-only scaling let portrait video
+    # produce frames far above the pixel budget. The second pass forces even
+    # dimensions, replacing the old `h=-2` alignment.
+    scale_filter = (
+        f"scale=w='min(iw,{settings.max_frame_dimension})':"
+        f"h='min(ih,{settings.max_frame_dimension})':"
+        "force_original_aspect_ratio=decrease,"
+        "scale=trunc(iw/2)*2:trunc(ih/2)*2"
+    )
 
     min_allowed = plan.window_start_seconds
     last_index = len(plan.timestamps) - 1

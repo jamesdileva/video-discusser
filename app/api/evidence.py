@@ -93,13 +93,24 @@ def preview_evidence(
                 max_frames=max_frames,
                 duration_seconds=resolved.duration_seconds,
             )
-            batch = extract_frames(
-                resolved,
-                plan,
-                settings=settings,
-                source_revision=snapshot.revision,
-                store=store,
-            )
+            try:
+                batch = extract_frames(
+                    resolved,
+                    plan,
+                    settings=settings,
+                    source_revision=snapshot.revision,
+                    store=store,
+                )
+            finally:
+                # Downloads are temporary by contract — delete the file once
+                # extraction no longer needs it, whatever the outcome.
+                if resolved.cleanup_after_use:
+                    try:
+                        resolved.path.unlink(missing_ok=True)
+                    except OSError as exc:
+                        LOGGER.warning(
+                            "could not remove download %s: %s", resolved.path.name, exc
+                        )
         except MediaSourceError as exc:
             raise ApiError(
                 _media_error_status(exc.code), exc.code, exc.message

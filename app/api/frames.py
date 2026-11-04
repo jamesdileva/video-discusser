@@ -35,5 +35,7 @@ def get_frame(
     return FileResponse(
         path,
         media_type="image/jpeg",
-        headers={"Cache-Control": "private, max-age=3600"},
+        # no-store: deleting a session must also end the browser's cached
+        # copies of evidence frames (audit S11).
+        headers={"Cache-Control": "no-store"},
     )

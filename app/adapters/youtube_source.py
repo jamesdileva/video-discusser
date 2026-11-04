@@ -118,4 +118,7 @@ class YouTubeSource:
             height=height,
             title=video_id,
             cleanup_after_use=True,
+            # The filename is per-download random; identity must key on the
+            # video so the frame cache can hit across requests (audit C4).
+            cache_identity=f"youtube:{video_id}",
         )
