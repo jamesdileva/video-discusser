@@ -1048,7 +1048,7 @@ cache-eligible frame cleanup; History card in the dashboard;
 
 1. **Test-data leak into developer data:** the test helpers built `Settings`
    without `sessions_dir`, so every pytest discussion wrote into the real
-   `data/sessions` DB (the same class of default-path leak as the Sprint 15
+   `data/sessions` DB (the same class of default-path leak as the Sprint 8
    env parsing issue). All test settings now isolate `sessions_dir`; the
    polluted dev DB was cleared (it contained only test debris).
 2. **SQLite WAL resurrection:** deleting the DB files while the server held

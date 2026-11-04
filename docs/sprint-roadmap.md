@@ -2,7 +2,7 @@
 
 **Status:** Proposed implementation sequence  
 **Version:** 1.0  
-**Last updated:** 2026-10-13
+**Last updated:** 2026-11-04
 
 This roadmap expands the supplied architecture into small, verifiable steps. Complete the verification gate at the end of each sprint before moving on. The early sprints deliberately avoid coupling the application to a large VLM before the hardware and API path are proven.
 

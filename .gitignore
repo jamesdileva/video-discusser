@@ -19,8 +19,14 @@ htmlcov/
 !.env.example
 
 # --- Generated media & local state ---
-data/
+# `data/**` (not `data/`) so the negations below can re-include specific
+# paths — git cannot re-include inside a fully excluded directory.
+data/**
 !data/.gitkeep
+# Published evaluation evidence (cited by docs/evaluation-report.md)
+!data/cache/
+!data/cache/eval/
+!data/cache/eval/results.json
 
 # --- Model weights & runtimes ---
 *.gguf

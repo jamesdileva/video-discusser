@@ -39,30 +39,30 @@ If a command is missing, install the tool using its official instructions and op
 From the repository root:
 
 ```powershell
-py -3.12 -m venv .venv
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -e ".[dev]"
 ```
 
-Use the Python version actually supported by the chosen pinned dependencies; the example above assumes Python 3.12 is selected. If PowerShell blocks activation, either adjust the current-user execution policy according to your normal security practice or use the virtual environment's Python executable directly. Do not run as administrator unless a specific dependency requires it.
+This project pins `requires-python = ">=3.14"` in `pyproject.toml`; use the installed Python 3.14 (the `py` launcher's 3.12 is not usable here). If PowerShell blocks activation, either adjust the current-user execution policy according to your normal security practice or use the virtual environment's Python executable directly. Do not run as administrator unless a specific dependency requires it.
 
 ## 3. Configuration
 
-Create `.env` from `.env.example` and use explicit values. Example settings:
+Create `.env` from `.env.example` and use explicit values. The block below is a **partial** example (a few key values); `.env.example` documents every knob with comments:
 
 ```dotenv
 APP_ENV=development
 APP_HOST=127.0.0.1
 APP_PORT=8000
-INFERENCE_BASE_URL=http://127.0.0.1:8081
+INFERENCE_BASE_URL=http://127.0.0.1:11434
+INFERENCE_MODEL=qwen3.5:4b
 CACHE_DIR=./data/cache
 ANALYSIS_WINDOW_SECONDS=180
 MAX_FRAMES_PER_REQUEST=12
 MAX_FRAME_DIMENSION=768
 JPEG_QUALITY=80
-MAX_CONCURRENT_INFERENCE=1
-INFERENCE_TIMEOUT_SECONDS=180
+INFERENCE_TIMEOUT_SECONDS=600
 EXTRACTION_TIMEOUT_SECONDS=120
 ```
 
@@ -74,7 +74,7 @@ Do not commit `.env`. Treat these values as starting points that must be checked
 
 Before writing application inference code:
 
-1. Start the selected local runtime on `127.0.0.1:8081`.
+1. Start the selected local runtime on `127.0.0.1:11434` (Ollama default; see `docs/runtime-feasibility.md`).
 2. Check the runtime's documented health/model endpoint.
 3. Send one known image with a short question.
 4. Confirm the response is local and the image is actually being processed.
@@ -238,7 +238,7 @@ Do not make the model output a legal verdict. The application is a commentary/re
 - Inspect the actual extracted thumbnails before running inference.
 
 ### Inference fails
-- Confirm runtime is on port 8081, not the backend port.
+- Confirm the runtime is on port 11434 (Ollama default), not the backend port.
 - Test the runtime independently with one image.
 - Verify exact image payload shape and model identifier.
 - Reduce frame count/resolution once and retest.
@@ -267,10 +267,10 @@ pytest
 pytest tests/test_sync.py -q
 pytest tests/test_frame_sampling.py -q
 python scripts/check_environment.py
-python scripts/smoke_test.py
+python scripts/vlm_smoke_test.py --model qwen3.5:4b   # correctness gate — needs the local runtime running
 ```
 
-The exact script names should match the files created during the roadmap. Unit tests should not require YouTube access, FFmpeg, or a GPU unless specifically marked as integration tests.
+Scripts that talk to the model runtime (`vlm_smoke_test.py`, `vlm_timing_probe.py`) require it to be up; the pytest suite itself runs without a GPU, network, or runtime. Unit tests should not require YouTube access, FFmpeg, or a GPU unless specifically marked as integration tests.
 
 ### Manual regression checklist
 

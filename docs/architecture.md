@@ -1,10 +1,10 @@
 # Video Discusser & Legal Commentary Agent — Architecture
 
-**Status:** Proposed baseline architecture  
-**Version:** 1.0  
-**Last updated:** 2026-10-13  
+**Status:** Implemented baseline (matches `v0.1.0-rc1`)  
+**Version:** 1.1  
+**Last updated:** 2026-11-04  
 **Primary target:** Windows 11 desktop, local-first, one user  
-**Source:** Expanded from the supplied `architecture(8).md`. New design decisions and compatibility notes are explicitly marked as recommendations.
+**Source:** Expanded from the supplied `architecture(8).md`. v1.0 (2026-10-13) was the pre-implementation proposal; v1.1 restates the design and contract as built over Sprints 0–17. Where the implementation deliberately deviated from the v1.0 recommendation, this revision records the deviation instead of the original suggestion.
 
 ## 1. Product purpose
 
@@ -81,8 +81,8 @@ A user can:
                                                ▼
                                       ┌──────────────────┐
                                       │ Local VLM runtime│
-                                      │ e.g. llama-server│
-                                      │ 127.0.0.1:8081   │
+                                      │ Ollama (MVP)     │
+                                      │ 127.0.0.1:11434  │
                                       └────────┬─────────┘
                                                │ text response
                                                ▼
@@ -135,65 +135,76 @@ A 7B model may be offered as an opt-in profile if it runs reliably, but the appl
 ```text
 video-discusser/
 ├── README.md
-├── architecture.md
-├── sprint-roadmap.md
-├── implementation-guide.md
-├── pyproject.toml
-├── requirements.txt                 # optional if pyproject is used as source of truth
+├── AGENTS.md
+├── docs/                            # architecture, roadmap, guide, feasibility,
+│   │                                # evaluation report, new-idea, dev log
+├── pyproject.toml                   # authoritative dependency pins (no requirements.txt)
 ├── .env.example
 ├── .gitignore
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                      # FastAPI app creation and router registration
-│   ├── config.py                    # validated settings
+│   ├── main.py                      # app factory, middleware order, wiring, dev fixture routes
+│   ├── config.py                    # validated settings (pydantic-settings, hard bounds)
 │   ├── schemas/
 │   │   ├── __init__.py
-│   │   ├── sync.py
-│   │   ├── discussion.py
-│   │   └── status.py
+│   │   ├── sync.py                  # SyncPayload, ActiveVideoState, local-file sync
+│   │   ├── discussion.py            # FrameRecord, evidence/discussion contracts
+│   │   ├── status.py                # health + service-state schemas
+│   │   └── errors.py                # structured error envelope
 │   ├── api/
 │   │   ├── __init__.py
-│   │   ├── health.py
-│   │   ├── sync.py
-│   │   ├── status.py
-│   │   └── discussion.py
+│   │   ├── health.py                # GET /api/health
+│   │   ├── sync.py                  # POST /api/sync, POST /api/sync/local-file
+│   │   ├── status.py                # GET /api/status
+│   │   ├── frames.py                # GET /api/frames/{frame_id}
+│   │   ├── evidence.py              # POST /api/evidence/preview
+│   │   ├── discussion.py            # POST /api/discuss
+│   │   ├── sessions.py              # history list / detail / delete / clear
+│   │   ├── security.py              # Host/Origin middleware + payload limit
+│   │   ├── errors.py                # ApiError + global handlers
+│   │   └── deps.py                  # shared dependencies, pipeline lock
 │   ├── services/
 │   │   ├── __init__.py
-│   │   ├── active_video.py           # current page/video state
-│   │   ├── discussion.py             # orchestration
-│   │   ├── frame_extraction.py       # extraction lifecycle
-│   │   ├── frame_sampling.py         # frame budget and timestamps
-│   │   ├── evidence_context.py       # frame metadata and prompt assembly
-│   │   └── inference.py              # runtime adapter
+│   │   ├── active_video.py          # race-aware active-video state (revisions)
+│   │   ├── youtube_url.py           # strict YouTube URL classification
+│   │   ├── frame_sampling.py        # window clamp + frame-budget planning
+│   │   ├── frame_extraction.py      # FFmpeg extraction, FrameStore, cache sweep
+│   │   ├── prompts.py               # system/user prompts (§11 policy)
+│   │   ├── inference.py             # OllamaInferenceAdapter (§10)
+│   │   ├── discussion.py            # DiscussionService orchestration
+│   │   └── session_store.py         # SQLite session history (Sprint 15)
 │   ├── adapters/
 │   │   ├── __init__.py
-│   │   ├── media_source.py           # interface/protocol
-│   │   ├── youtube_source.py         # optional yt-dlp implementation
-│   │   └── local_file_source.py      # user-selected file implementation
-│   ├── storage/
-│   │   ├── __init__.py
-│   │   └── session_store.py          # in-memory first; SQLite later
+│   │   ├── media_source.py          # MediaSource protocol, registry, ffprobe
+│   │   ├── local_file_source.py     # LOCAL_MEDIA_DIRS allowlist source
+│   │   ├── youtube_source.py        # opt-in yt-dlp source
+│   │   └── subprocess_utils.py      # the single subprocess chokepoint
 │   └── static/
 │       ├── index.html
 │       ├── styles.css
-│       └── app.js
+│       ├── app.js
+│       └── dev-harness.html
 ├── browser/
-│   └── youtube-sync.user.js
+│   ├── youtube-sync.user.js
+│   ├── README.md                    # Tampermonkey setup + manual checklist
+│   └── fixtures/test-clip.mp4
 ├── data/
-│   ├── cache/                        # generated frames and clips, ignored by Git
-│   └── sessions/                     # optional local database, ignored by Git
+│   ├── cache/                       # generated frames + eval artifacts, ignored by Git
+│   │   └── eval/results.json        # (only published exception — see .gitignore)
+│   └── sessions/                    # local SQLite history, ignored by Git
 ├── scripts/
-│   ├── check_environment.py
-│   └── smoke_test.py
+│   ├── check_environment.py         # preflight + --diagnostics
+│   ├── serve.py                     # config-driven launcher
+│   ├── run_evaluation.py            # evaluation harness (Sprint 11 test set)
+│   ├── vlm_smoke_test.py            # correctness gate (needs the local runtime)
+│   ├── vlm_timing_probe.py          # timing probe (needs the local runtime)
+│   └── make_test_image.ps1          # deterministic ground-truth frames
 └── tests/
     ├── conftest.py
-    ├── test_health.py
-    ├── test_sync.py
-    ├── test_status.py
-    ├── test_frame_sampling.py
-    ├── test_discussion.py
-    └── test_inference_adapter.py
+    └── test_*.py                    # one file per boundary/route; no GPU/network required
 ```
+
+Deviations from the v1.0 proposal, recorded: documentation lives in `docs/` rather than the repo root; `requirements.txt` was dropped (`pyproject.toml` is authoritative); session persistence lives in `app/services/session_store.py` (no separate `app/storage/` package); prompt assembly lives in `app/services/prompts.py` (the proposed `evidence_context.py` name was not used); URL classification lives in `app/services/youtube_url.py`; and the `smoke_test.py` placeholder became `vlm_smoke_test.py` plus a dedicated evaluation harness (`run_evaluation.py`).
 
 ## 6. Core domain models
 
@@ -244,7 +255,9 @@ The response should make the evidence window inspectable and allow the UI to lin
 
 ## 7. API contract
 
-All application routes use `http://127.0.0.1:8000`. The inference runtime uses a different configurable port, default `http://127.0.0.1:8081`. Do not use port 8000 for both services.
+All application routes use `http://127.0.0.1:8000`. The inference runtime uses a different configurable port, default `http://127.0.0.1:11434` (Ollama, per the Sprint 1 feasibility record). A standalone llama-server on 8081 remains a *fallback candidate* — it would need its own adapter (§10); it is not reachable by changing `INFERENCE_BASE_URL` alone. The config validator rejects an inference URL on the backend port. The OpenAPI/docs UIs are disabled (`docs_url=None`); this section is the contract.
+
+Every error uses the envelope `{"error": {"code": ..., "message": ..., "details"?}}` (`app/schemas/errors.py`) with stable codes (table below). Raw exception details never reach the browser; unhandled errors log server-side and return a generic `500 internal_error`. Every response carries an `X-Request-ID` header (client-supplied IDs are accepted only in a strict `[0-9a-f-]{8,64}` format).
 
 ### `GET /api/health`
 
@@ -269,17 +282,19 @@ Returns current sync state and service readiness.
     "source": "youtube",
     "timestamp_seconds": 125.4,
     "updated_at": "2026-10-13T12:00:00Z",
-    "revision": 2
+    "sync_source": "pause_event",
+    "revision": 2,
+    "title": null
   },
   "services": {
     "backend": "ready",
-    "inference": "unknown",
+    "inference": "ready",
     "media_tools": "ready"
   }
 }
 ```
 
-Use `null` for absent active video. Service values should be explicit states such as `ready`, `unavailable`, `not_configured`, and `unknown`.
+`active_video` is `null` before the first sync. Service values are explicit states: `ready`, `unavailable`, `not_configured`, `unknown`. `inference` comes from the adapter's TTL-cached health probe (2 s timeout, 10 s TTL); `media_tools` is a PATH lookup for FFmpeg.
 
 ### `POST /api/sync`
 
@@ -294,12 +309,43 @@ Request:
 }
 ```
 
-Validation requirements:
-- Only supported source URLs are accepted by the YouTube adapter.
-- Timestamp must be finite and non-negative.
-- URL length and request body are bounded.
-- Reject malformed URLs; do not shell-interpolate them.
-- A successful response returns the new state revision.
+Validation: only allowlisted YouTube hosts (`youtube.com`, `www.youtube.com`, `m.youtube.com`, `youtu.be`) and schemes (http/https) are accepted, in exactly three shapes — `watch?v=<id>` (extra query parameters tolerated, exactly one valid `v`), `youtu.be/<id>`, and `shorts/<id>` (11-char video ID alphabet). Timestamps must be finite and non-negative; URLs are bounded at 2048 chars; a supplied `video_id` must agree with the URL. URLs are parsed, never shell-interpolated. `sync_source` is `pause_event` or `manual` — a manual sync uses this same route (there is no separate `/api/sync/manual`).
+
+Response `200`: `{"revision": 2, "active_video": {...}}` — the new revision plus the full snapshot. Errors: `422 invalid_url`, `422 missing_video_id`, `422 video_id_mismatch`, `422 validation_error`.
+
+### `POST /api/sync/local-file`
+
+Request `{"path": "C:\\Users\\you\\Videos\\clip.mp4", "timestamp_seconds": 0.0}` (timestamp defaults to `0.0`). The path is resolved through the local-file source and honored **only** inside the configured `LOCAL_MEDIA_DIRS` roots (resolved-path containment, so `..` traversal and symlink escapes fail); UNC/device paths (`\\...`) are rejected. The generated video ID is `local_<sha256[:12]>`. Response shape matches `POST /api/sync`.
+
+Errors: `422 local_path_not_allowed`, `422 media_not_found`, `422 media_probe_failed`, `503 media_tool_missing`, `503 media_source_unavailable`.
+
+Note: the timestamp defaults to `0.0` and the dashboard offers no moment selector yet — local-file analysis anchors at the start of the file (v0.1.0; a choose-the-moment control is post-MVP).
+
+### `POST /api/evidence/preview`
+
+Runs resolve → sample → extract for the active video, with no model involvement (what the dashboard shows before asking). Request `{"window_seconds": 60, "max_frames": 12}` — both optional; values are clamped to configured bounds (a request can narrow, never widen). Response:
+
+```json
+{
+  "request_id": "…",
+  "cache_key": "…",
+  "snapshot_revision": 2,
+  "video_id": "example-id",
+  "source": "youtube",
+  "window": {"start_seconds": 0.0, "end_seconds": 125.4},
+  "frames": [
+    {"frame_id": "…", "timestamp_seconds": 110.0,
+     "preview_url": "/api/frames/…", "width": 768, "height": 432}
+  ],
+  "warnings": []
+}
+```
+
+The snapshot revision is taken up front and echoed, so a video change during extraction is visible to the UI. Errors: `400 no_active_video`, `409 extraction_in_progress`, plus the media/extract codes below.
+
+### `GET /api/frames/{frame_id}`
+
+Serves only an application-owned, validated cached image (`image/jpeg`). The ID must be a 32-hex frame ID present in the `FrameStore`, and the resolved path must stay inside the cache root — traversal is never probed or echoed. `404 unknown_frame` for malformed, unknown, or evicted IDs. Responses carry `Cache-Control: no-store` so deleted evidence frames do not live on in browser caches.
 
 ### `POST /api/discuss`
 
@@ -313,30 +359,72 @@ Request:
 }
 ```
 
-Response includes `answer`, the selected frame timestamps, the analysis window, warnings, and request ID. Return structured errors rather than plain-text exceptions.
+(`window_seconds`/`max_frames` optional; clamped to configured bounds.)
 
-Suggested errors:
-- `400 no_active_video`
-- `422 invalid_question_or_window`
-- `409 sync_changed_during_request`
-- `422 media_source_unavailable`
-- `503 inference_unavailable`
-- `504 inference_timeout`
-- `500 frame_extraction_failed`
+Response `200`:
 
-### `GET /api/frames/{frame_id}`
+```json
+{
+  "request_id": "…",
+  "answer": "Visible observations: …",
+  "video_id": "example-id",
+  "source": "youtube",
+  "anchor_timestamp_seconds": 125.4,
+  "window_start_seconds": 0.0,
+  "window_end_seconds": 125.4,
+  "frames_used": [
+    {"frame_id": "…", "timestamp_seconds": 110.0,
+     "preview_url": "/api/frames/…", "width": 768, "height": 432}
+  ],
+  "warnings": ["Only sampled still frames were reviewed; …"],
+  "snapshot_revision": 2,
+  "revision_changed": false,
+  "model_id": "qwen3.5:4b",
+  "elapsed_seconds": 84.7
+}
+```
 
-Serves only an application-owned, validated cached image. A frame ID must map to a path within the configured cache root; reject traversal and unknown IDs.
+A video change during processing is *reported* (`revision_changed: true`, result tagged with `snapshot_revision`), never silently relabeled onto the new video.
 
-### Optional future routes
+### Session history
 
-- `GET /api/sessions`
-- `GET /api/sessions/{session_id}`
-- `DELETE /api/sessions/{session_id}`
-- `POST /api/sync/manual`
-- `GET /api/jobs/{job_id}` for long-running extraction/inference jobs
+- `GET /api/sessions` → `{"enabled": bool, "sessions": [{session_id, video_id, source, title, model_id, created_at, last_activity_at, message_count}]}`
+- `GET /api/sessions/{session_id}` → `{"session": {...}, "messages": [{role, content, created_at, snapshot_revision, window: [start, end], frames: [{frame_id, timestamp_seconds, preview_url}]}]}` — stored absolute paths are never echoed; frame references are opaque IDs plus cache-relative paths.
+- `DELETE /api/sessions/{session_id}` → `{"deleted": id, "frames_removed": n}` — removes the session and the cached frames no longer referenced by any other session.
+- `DELETE /api/sessions` → `{"cleared_sessions": n, "frames_removed": m}` — clears all history and all cached frames.
 
-Do not build these until the corresponding sprint requires them.
+Deletion shares the pipeline lock (frames are not unlinked under a running job). Errors: `404 session_not_found`, `404 sessions_disabled`, `409 request_in_progress`.
+
+### Development-only routes
+
+Registered only when `APP_ENV=development` (the shipped default in `.env.example`; the code default is `production`): `GET /dev/youtube-sync.user.js` and `GET /dev/test-clip.mp4` back the userscript test harness (`/dev-harness.html`). Never registered otherwise.
+
+### Error codes (implemented)
+
+| HTTP | Code | Raised by |
+|---|---|---|
+| 400 | `no_active_video` | discuss, evidence preview |
+| 403 | `forbidden_origin` | Host/Origin middleware (DNS-rebinding and foreign-origin rejection) |
+| 404 | `unknown_frame` | frame preview |
+| 404 | `session_not_found`, `sessions_disabled` | sessions |
+| 409 | `request_in_progress` | discuss and session deletion (pipeline lock held; ~2 s bounded wait first) |
+| 409 | `extraction_in_progress` | evidence preview (same lock) |
+| 413 | `payload_too_large` | body over `MAX_REQUEST_BYTES` (default 1 MiB), counted on the wire — chunked bodies cannot bypass it |
+| 422 | `validation_error` | schema validation (fields listed; body never echoed) |
+| 422 | `invalid_url`, `missing_video_id` | sync URL classification |
+| 422 | `video_id_mismatch` | sync |
+| 422 | `invalid_question` | discuss (blank or over `MAX_QUESTION_CHARS`) |
+| 422 | `local_path_not_allowed`, `media_not_found`, `media_probe_failed`, `invalid_request`, `invalid_url` | media sources (user-input side) |
+| 500 | `internal_error` | unhandled exceptions (trace logged server-side only) |
+| 500 | `process_failed`, `frame_extraction_failed`, `inference_invalid_request` | tool/extraction defaults and app-built inference requests |
+| 502 | `media_download_failed` | YouTube download |
+| 502 | `inference_invalid_response`, `inference_empty_response` | runtime response validation |
+| 503 | `media_source_unavailable`, `media_tool_missing` | media sources (service side) |
+| 503 | `inference_unavailable` | runtime unreachable / non-200 generation |
+| 504 | `media_download_timeout`, `process_timeout` | download / tool timeouts |
+| 504 | `inference_timeout` | runtime read timeout |
+
+The v1.0 suggestions `invalid_question_or_window` and `sync_changed_during_request` were not implemented as errors: out-of-range window/frame requests are clamped silently, and a video change mid-request is reported in-band via `revision_changed` rather than failing the request.
 
 ## 8. Main workflows
 
@@ -370,37 +458,42 @@ For MVP, follow-ups may reuse the selected frame set and prior conversation mess
 
 ## 9. Frame and memory budget
 
-The original concept uses a 3-minute rolling window and one frame every four seconds (45 frames). That is a useful hypothesis, not a proven safe limit for a 4 GB VRAM system. The MVP should default to a smaller, configurable budget and increase only after benchmarking.
+The original concept uses a 3-minute rolling window and one frame every four seconds (45 frames). That is a useful hypothesis, not a proven safe limit for a 4 GB VRAM system. The shipped defaults below come from `app/config.py` (pydantic-settings with hard bounds; the validator enforces them even when a request asks for more):
 
-Suggested initial defaults:
-- `ANALYSIS_WINDOW_SECONDS=180`
-- `MAX_FRAMES_PER_REQUEST=12`
-- `FRAME_SAMPLE_INTERVAL_SECONDS=15` as a candidate starting point, adjusted to hit the frame cap
-- `MAX_FRAME_DIMENSION=768` (preserve aspect ratio)
-- `JPEG_QUALITY=80`
-- `MAX_CONCURRENT_INFERENCE=1`
-- `INFERENCE_TIMEOUT_SECONDS=180`
-- `MAX_QUESTION_CHARS=2000`
-- `MAX_CHAT_TURNS=8` (if chat history is enabled)
+- `APP_HOST=127.0.0.1`, `APP_PORT=8000` (loopback-only, validated)
+- `INFERENCE_BASE_URL=http://127.0.0.1:11434` (loopback + port-collision validated), `INFERENCE_MODEL=qwen3.5:4b`
+- `INFERENCE_NUM_CTX=8192` (allowed 1024–65536; 12 frames ≈ 4k vision tokens)
+- `INFERENCE_THINK_ENABLED=true` (Sprint 1 quality finding)
+- `INFERENCE_TIMEOUT_SECONDS=600` (allowed 5–3600; Sprint 10 telemetry: 12 frames + thinking exceeded the original 180 s)
+- `EXTRACTION_TIMEOUT_SECONDS=120` (allowed 5–3600)
+- `ANALYSIS_WINDOW_SECONDS=180` (allowed 5–3600)
+- `MAX_FRAMES_PER_REQUEST=12` (allowed 1–45; the dashboard sends 6 for live chat, 12 for evidence preview)
+- `MAX_FRAME_DIMENSION=768` (allowed 128–2048; **both** axes are bounded with aspect ratio preserved), `JPEG_QUALITY=80`
+- `MAX_QUESTION_CHARS=2000` (allowed 1–10000)
+- `MAX_REQUEST_BYTES=1048576` (1 MiB payload limit; allowed 4096–100 MiB)
+- `CACHE_DIR=./data/cache`, `CACHE_MAX_BYTES=1073741824` (1 GiB; allowed 10 MiB–100 GiB)
+- `LOCAL_MEDIA_DIRS=` (semicolon-separated; empty disables local-file mode), `YOUTUBE_SOURCE_ENABLED=false`, `MEDIA_DOWNLOAD_TIMEOUT_SECONDS=600`
+- `SESSIONS_ENABLED=true`, `SESSIONS_DIR=./data/sessions`
+- `APP_ENV` defaults to `production` in code; `.env.example` sets `development` (which enables the dev fixture routes)
 
-These are conservative starting values to test, not universal model requirements. A configuration validator must enforce hard upper bounds even if a request supplies larger values.
+These are measured starting points, not universal model requirements. Concurrency is one single pipeline lock — a second discussion/extraction waits up to 2 s, then receives a structured 409. (`MAX_CONCURRENT_INFERENCE`, `MAX_CHAT_TURNS`, and `FRAME_SAMPLE_INTERVAL_SECONDS` from the v1.0 list were never wired to behavior and were removed in the RC audit.)
 
-### Sampling strategy
+### Sampling strategy (as implemented)
 
-- Always include the final frame at or just before the anchor timestamp if available.
-- Spread remaining frames across the analysis window.
-- Avoid duplicate/near-identical frames where practical.
-- If a question names a specific moment, allow a later UI feature to request a narrower window.
-- Display the sampled timestamps so users can notice gaps.
-- If the model's visual payload limit is reached, reduce frame count or resolution and retry once with a smaller budget; do not retry indefinitely.
+- The analysis window is `[anchor - window, anchor]`, clamped to `[0, duration - 0.05]` (EOF guard: seeking exactly to end-of-stream yields no frame).
+- The anchor (pause) frame is always included and always sorts last; it is clamped without rounding above the window end, so it can never be silently dropped.
+- Remaining frames are spread evenly across the window; the configured cap is a maximum, never a promise (rounding can merge near-duplicates).
+- Request-level values can narrow the window or frame count; they can never widen the configured caps.
+- Sampled timestamps are shown in the dashboard (evidence card and per-answer footer) so users can notice gaps.
+- The visual payload is bounded up front by the frame cap; the only automatic retry is the adapter's single fallback that drops the `think` flag when the runtime rejects it with HTTP 400.
 
 ### Cache and cleanup
 
-- Cache key: stable hash of video/source identity, window, sample timestamps, and extraction settings.
-- Store frames under generated IDs, not URL-derived filenames.
-- Delete stale cache entries by age and total disk budget.
-- Never delete files while a request is actively using them.
-- Provide a “clear cached frames” action in a later UI sprint.
+- Cache key: stable hash of source identity, window, sample timestamps, and extraction settings. Downloaded YouTube streams key on the video ID (`youtube:<id>`), not the per-download filename, so re-downloads still hit the cache.
+- Store frames under generated 32-hex IDs, not URL-derived filenames.
+- Delete stale cache entries by age and total disk budget (`CACHE_MAX_BYTES`, oldest first), with a 5-minute active grace: batches younger than that are never swept, even when over budget.
+- Downloaded YouTube streams are temporary: they are deleted as soon as extraction finishes, whatever the outcome.
+- Shipped: `DELETE /api/sessions` clears history and all cached frames (dashboard History card).
 - Default to no long-term retention of raw video clips. Keep extracted frames only as long as needed unless the user explicitly opts into session retention.
 
 ## 10. Inference adapter contract
@@ -415,6 +508,8 @@ Interface responsibilities:
 Capabilities should indicate whether the runtime supports image inputs, maximum configured context, and any known image-count restrictions. Treat capability information as configuration and verified tests, not assumptions based on a model name.
 
 The MVP should send frames as separate image inputs using the schema supported by the selected runtime. A video file path on the backend is not automatically accessible to the model server, and a generic OpenAI-compatible endpoint does not guarantee support for every multimodal content type.
+
+**As implemented (Sprint 9):** the adapter is `OllamaInferenceAdapter` (`app/services/inference.py`) and is **Ollama-specific** — it health-checks `/api/version` and generates through Ollama's native `/api/chat` with base64 `images`, `options.num_ctx`, and the `think` flag (one retry without `think` if the runtime answers HTTP 400 for a non-thinking model). The v1.0 sketch `generate(messages, settings)` became the stricter typed signature `generate(system_prompt, user_prompt, image_paths, timeout_seconds, num_ctx, think)` (prompt construction belongs to the orchestrator, not the adapter), and `health_check()` returns a plain `ServiceState` string. Capabilities are the `RuntimeCapabilities` dataclass; `supports_video_input` is hard-coded `False` — video input was never verified. A standalone llama-server fallback means writing a new adapter with the same three responsibilities; switching `INFERENCE_BASE_URL` to one will not work.
 
 ## 11. Prompt and evidence policy
 
@@ -460,6 +555,14 @@ This is a single-user local application, but localhost services still need caref
 - Provide visible status when media processing or inference is running.
 - Add a small local request token or origin-bound pairing step if browser-origin protections are insufficient in testing. Do not put a long-lived secret in a public userscript repository.
 - Document that local media extraction and downloading must comply with platform terms, copyright, and user authorization. Do not attempt DRM circumvention.
+
+### Implemented decisions (Sprint 13)
+
+- **No CORS middleware, on purpose.** The backend emits no cross-origin headers at all, which is stricter than any allowlist — cross-origin browser JS can never read responses. The userscript needs no CORS: it uses `GM_xmlhttpRequest` (extension-privileged) with the marker header below.
+- **Host validation first.** Non-loopback `Host` headers (and syntactically impossible ones) are rejected with `403 forbidden_origin`, which closes DNS rebinding outright.
+- **Origin validation + marker header.** Loopback origins on the app's port pass (the dashboard); any other origin must carry `X-Video-Discusser-Client: userscript` — a custom header a hostile page cannot attach cross-origin (the server never answers its preflight) but the privileged userscript can. Empty or different marker values are rejected.
+- **No request token/pairing** (resolving the conditional bullet above): Host + Origin + the preflight-immune marker header cover the local threat model without key management.
+- Bodies over `MAX_REQUEST_BYTES` (default 1 MiB) are rejected with a structured 413 before parsing — the body is counted on the wire, so chunked encoding cannot bypass the cap. HTML responses carry a conservative CSP (`default-src 'self'`, `frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`.
 
 ## 14. Observability and diagnostics
 
@@ -519,11 +622,13 @@ Dashboard service indicators:
 | Frontend | Static HTML/JS | UI complexity warrants React or desktop packaging |
 | Browser integration | Tampermonkey userscript | Permission/event limitations block reliable sync |
 | Backend port | 8000 | Only via configuration |
-| Inference port | 8081 | Only via configuration |
+| Inference port | 11434 (Ollama; a llama-server on 8081 remains a fallback candidate needing its own adapter) | Only via configuration |
 | Model strategy | Small quantized vision model, frame-by-frame image inputs | Benchmarks justify a larger model or a tested video-capable API |
 | Media access | Adapter supports YouTube and local-file modes | Site compatibility needs change |
-| State | In-memory active-video state; SQLite later | Conversation history/session persistence is needed |
-| Default frame cap | 12 initial candidate | Benchmark shows quality/memory trade-off |
+| State | In-memory active-video state; SQLite session history shipped (Sprint 15) | Schema changes require a versioned migration |
+| Default frame cap | 12 configured max; dashboard sends 6 live / 12 preview (Sprint 10/11 measurements) | Measured need changes |
+| CORS | None emitted; Host/Origin validation + userscript marker header (Sprint 13) | Local threat model changes |
+| Concurrency | Single pipeline lock; 2 s bounded wait, then structured 409 | A multi-job need arises |
 | Legal framing | Commentary, not legal advice | Never remove the limitation |
 | Remote access | Out of scope | Requires a separate threat model |
 

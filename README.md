@@ -13,20 +13,16 @@ sync state, the evidence the model was given, and the conversation.
 
 ## Status
 
-🚧 In active development — see [`docs/sprint-roadmap.md`](docs/sprint-roadmap.md).
+**`v0.1.0-rc1`** tagged 2026-11-04 — sprints 0–17 complete
+([`docs/sprint-roadmap.md`](docs/sprint-roadmap.md),
+[`docs/dev-log.md`](docs/dev-log.md)).
 
-| Working | Not yet |
+| Working | Still open |
 |---|---|
-| Architecture, roadmap, implementation guide; environment baseline (Sprint 0) | Real-model evaluation (Sprint 11) |
-| **Runtime feasibility: local VLM proven on the 4 GB AMD GPU (Sprint 1)** | Reliability, hardening & MVP release (Sprints 12–17) |
-| **Backend skeleton: health endpoint, validated config (Sprint 2)** | |
-| **Sync API, race-aware active-video state, status endpoint (Sprint 3)** | |
-| **Live dashboard: status polling, service indicators, chat shell (Sprint 4)** | |
-| **YouTube pause-sync userscript + dev test harness (Sprint 5)** | |
-| **Media adapters + frame extraction & bounded sampling (Sprints 6–7)** | |
-| **Evidence preview UI: local-file sync, thumbnails, window selector (Sprint 8)** | |
-| **Inference adapter (9) + discussion orchestration (10): grounded answers from the local model** | Reliability & hardening (Sprints 12–13) |
-| **Evaluation: 5/5 judged cases pass — honest uncertainty, correct citations, measured profile ([report](docs/evaluation-report.md), Sprint 11)** | Setup experience & MVP release (Sprints 16–17) |
+| Full vertical slice: userscript pause-sync, media adapters, bounded frame extraction, evidence preview, grounded answers from the local model (Sprints 0–11) | Real-Tampermonkey round-trip on live YouTube — manual checklist in [`browser/README.md`](browser/README.md) |
+| Reliability, concurrency, cache budget, security hardening, legal-framing UI, session history, setup guide + preflight (Sprints 12–16) | Pristine-machine setup pass (no preinstalled Python/FFmpeg) |
+| Evaluation: **6/6 judged cases pass + 1 favorable RECORD** — honest uncertainty, correct citations, measured profile ([report](docs/evaluation-report.md)) | Post-MVP roadmap (Sprints 18+): transcript/audio, focused re-sampling, export, desktop packaging |
+| Release candidate: pre-release audit, known limitations, tagged measured profile (Sprint 17) | |
 
 ## Setup (Windows 11)
 
@@ -56,6 +52,11 @@ python -m pip install --upgrade pip
 pip install -e ".[dev]"
 ```
 
+If PowerShell blocks `Activate.ps1` with a "running scripts is disabled"
+error, either set your usual per-user execution policy
+(`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`) or call the venv's
+Python directly (`.venv\Scripts\python.exe`).
+
 ### 3. Configure
 
 ```powershell
@@ -70,9 +71,9 @@ LOCAL_MEDIA_DIRS=C:\Users\you\Videos
 ```
 
 Everything else works at its defaults: backend on `127.0.0.1:8000`, model
-runtime on `127.0.0.1:11434`, `qwen3.5:4b`, history on. See
-`.env.example` for every knob (frame budgets, timeouts, cache size, the
-opt-in YouTube source).
+runtime on `127.0.0.1:11434`, `qwen3.5:4b`, thinking mode on, history on.
+See `.env.example` for the full set of knobs (frame budgets, timeouts,
+cache size, the opt-in YouTube source).
 
 ### 4. Preflight
 
@@ -111,14 +112,17 @@ ready* and *Model runtime: ready* when both are up.
 
 - **Local file:** type its path in the dashboard's *Active video* card
   (the path must be under `LOCAL_MEDIA_DIRS`), press *Sync local file*.
+  Local-file sync always anchors at 0:00 — the analysis covers the start
+  of the file; choosing the moment is a planned post-MVP feature.
 - **YouTube:** install the Tampermonkey userscript — see
   [`browser/README.md`](browser/README.md) — then open a YouTube watch
   page and pause; the sync happens automatically.
 
 Press **Preview frames** to see exactly what the model will receive, then
-type a question and press **Ask**. Answers arrive in 30–90 s on the target
-hardware (thinking mode on); the model separates observations from
-interpretation and says when the frames cannot establish something.
+type a question and press **Ask**. Answers typically take 1–4 min on the
+target hardware (thinking mode on; up to ~4 min observed); the model
+separates observations from interpretation and says when the frames cannot
+establish something.
 
 ### 8. Troubleshooting
 
@@ -144,8 +148,9 @@ explicit concern either way.
 - Windows 11 x64 (primary target)
 - Python 3.14+
 - FFmpeg on PATH
-- A tested local VLM runtime (llama.cpp — the target GPU is AMD, 4 GB VRAM, so
-  Vulkan/CPU, not CUDA/vLLM)
+- A tested local VLM runtime: **Ollama** (llama.cpp-based) with a tested
+  vision model — the target GPU is AMD, 4 GB VRAM, so Vulkan/CPU, not
+  CUDA/vLLM
 - Optional: [Tampermonkey](https://www.tampermonkey.net/) for YouTube sync, yt-dlp
   for YouTube source access
 
@@ -154,6 +159,9 @@ explicit concern either way.
 - [`docs/architecture.md`](docs/architecture.md) — design, API contract, security baseline
 - [`docs/sprint-roadmap.md`](docs/sprint-roadmap.md) — sprint plan and verification gates
 - [`docs/implementation-guide.md`](docs/implementation-guide.md) — setup and debugging
+- [`docs/runtime-feasibility.md`](docs/runtime-feasibility.md) — Sprint 1 hardware/runtime feasibility record
+- [`docs/evaluation-report.md`](docs/evaluation-report.md) — end-to-end model evaluation and the measured profile
+- [`browser/README.md`](browser/README.md) — userscript setup and the manual test checklist
 - [`docs/new-idea.md`](docs/new-idea.md) — proposed whole-video summary mode (deferred)
 - [`AGENTS.md`](AGENTS.md) — working conventions for agents and contributors
 - [`docs/dev-log.md`](docs/dev-log.md) — sprint-by-sprint work log
@@ -163,13 +171,17 @@ explicit concern either way.
 Honest boundaries of `v0.1.0-rc1`, from the [evaluation report](docs/evaluation-report.md)
 and the [dev log](docs/dev-log.md):
 
-- **Speed.** Answers take ~30–240 s on the target hardware (4 GB VRAM,
-  thinking mode; generation length varies between runs). No streaming —
-  the dashboard polls until the answer lands.
+- **Speed.** Answers typically take 1–4 min on the target hardware (4 GB
+  VRAM, thinking mode; generation length varies between runs and up to
+  ~4 min has been observed — the 600 s ceiling bounds the worst case).
+  No streaming — the dashboard waits on the request until the answer lands.
 - **Sampling gaps, by design.** Only sampled still frames are analyzed;
   events between frames and all audio are invisible to the model (the UI
   says so on every answer). Denser sampling around a chosen moment is a
   planned post-MVP feature.
+- **Local-file mode anchors at 0:00.** Syncing a local file always analyzes
+  from the start of the file — there is no choose-the-moment control yet
+  (a planned post-MVP feature). YouTube pause-sync anchors where you paused.
 - **Evaluation coverage is synthetic.** The fixed test set uses generated
   clips with controlled ground truth. Real-footage cases need lawful local
   media or the opt-in YouTube source and are still pending.
@@ -194,4 +206,4 @@ must comply with the platform's terms, copyright, and applicable law.
 
 ## License
 
-Not yet selected.
+Proprietary (all rights reserved — license not yet selected).

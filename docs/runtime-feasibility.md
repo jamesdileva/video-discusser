@@ -12,7 +12,7 @@
 | Model (MVP candidate) | **`qwen3.5:4b`** (2.7 GB on disk; ~75% on GPU at default settings) |
 | API surface | Ollama native `/api/chat`, base64 `images` array; `think` flag; `options.num_ctx` per request |
 | Backend port separation | Ollama default `127.0.0.1:11434` (≠ app port 8000). Deviation from architecture.md's `8081` example — the *intent* (separate configurable ports) is preserved; architecture doc to be updated when the inference adapter lands. |
-| Fallback candidates | `qwen2.5vl:3b` (works, 5–10× slower vision); standalone `llama.cpp` Vulkan build with `--image-max-tokens` (most control, not needed yet) |
+| Fallback candidates | `qwen2.5vl:3b` (works, ~8–17× slower vision encode — 20–40 s vs ~2.4 s per image); standalone `llama.cpp` Vulkan build with `--image-max-tokens` (most control, not needed yet) |
 
 ## Why Ollama rather than a standalone llama.cpp install
 
