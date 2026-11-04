@@ -53,7 +53,7 @@ def _error_status(code: str) -> int:
 
 
 @router.post("/api/discuss", response_model=DiscussionResponse)
-async def post_discuss(
+def post_discuss(
     payload: DiscussionRequest,
     lock: threading.Lock = Depends(get_pipeline_lock),
     service: DiscussionService = Depends(get_discussion_service),

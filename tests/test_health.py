@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+from conftest import TestClient  # loopback-Host test client
 
 from app import __version__
 

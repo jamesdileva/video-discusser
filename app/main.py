@@ -33,6 +33,7 @@ from app.api import discussion as discussion_api
 from app.api import evidence as evidence_api
 from app.api import frames as frames_api
 from app.api.errors import install_error_handlers
+from app.api.security import PayloadLimitMiddleware, SecurityMiddleware
 from app.config import Settings, get_settings
 from app.services.active_video import ActiveVideoService
 from app.services.discussion import DiscussionService
@@ -129,6 +130,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
+    # Middleware order: the LAST add_middleware call is outermost, so the
+    # request ID wraps everything (rejected requests still get X-Request-ID),
+    # security checks run before payload limits.
+    app.add_middleware(PayloadLimitMiddleware, max_bytes=settings.max_request_bytes)
+    app.add_middleware(SecurityMiddleware, settings=settings)
     app.add_middleware(RequestIdMiddleware)
     app.include_router(health.router)
     app.include_router(sync_api.router)

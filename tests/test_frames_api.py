@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+from conftest import TestClient  # loopback-Host test client
 
 from app.adapters.media_source import ResolvedMedia
 from app.config import Settings

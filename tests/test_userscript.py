@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from fastapi.testclient import TestClient
+from conftest import TestClient  # loopback-Host test client
 
 BROWSER_DIR = Path(__file__).resolve().parent.parent / "browser"
 USERSCRIPT_PATH = BROWSER_DIR / "youtube-sync.user.js"

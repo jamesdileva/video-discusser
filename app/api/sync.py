@@ -33,7 +33,7 @@ router = APIRouter(tags=["sync"])
 
 
 @router.post("/api/sync", response_model=SyncAcceptedResponse)
-async def post_sync(
+def post_sync(
     payload: SyncPayload,
     service: ActiveVideoService = Depends(get_active_video_service),
 ) -> SyncAcceptedResponse:
@@ -66,7 +66,7 @@ async def post_sync(
 
 
 @router.post("/api/sync/local-file", response_model=SyncAcceptedResponse)
-async def post_sync_local_file(
+def post_sync_local_file(
     payload: LocalFileSyncPayload,
     request: Request,
     service: ActiveVideoService = Depends(get_active_video_service),

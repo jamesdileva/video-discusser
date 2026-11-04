@@ -249,7 +249,14 @@
         GM_xmlhttpRequest({
           method: "POST",
           url: BACKEND_ORIGIN + "/api/sync",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            // Security middleware (Sprint 13): cross-origin requests are
+            // rejected unless they carry this extension-privileged marker —
+            // hostile web pages cannot attach custom headers cross-origin
+            // because the CORS preflight this server never answers fails.
+            "X-Video-Discusser-Client": "userscript",
+          },
           data: body,
           timeout: REQUEST_TIMEOUT_MS,
           onload: function (response) {

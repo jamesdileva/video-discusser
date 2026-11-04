@@ -24,7 +24,7 @@ def get_inference_adapter(request: Request) -> OllamaInferenceAdapter:
 
 
 @router.get("/api/status", response_model=StatusResponse)
-async def get_status(
+def get_status(
     service: ActiveVideoService = Depends(get_active_video_service),
     inference: OllamaInferenceAdapter = Depends(get_inference_adapter),
 ) -> StatusResponse:

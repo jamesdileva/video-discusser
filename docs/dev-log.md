@@ -865,3 +865,81 @@ request cancellation on client disconnect (FastAPI limitation, documented).
 **Unverified / deferred:** true async cancellation on client disconnect
 (FastAPI/Starlette limitation — jobs run to completion; bounded timeouts cap
 the cost); disk-budget telemetry in the UI (Sprint 14).
+
+## 2026-11-03 — Sprint 13: Local security and privacy hardening
+
+**Goal:** Reduce avoidable risks in a local-only app.
+
+**Plan & scope:** Host + Origin validation middleware, payload-size limit,
+conservative response headers, userscript marker header, regression tests,
+hardening checklist. Deferred: request token/pairing (decision: not required
+— see below), TLS (loopback only), rate limiting beyond the pipeline lock.
+
+**What was done:**
+
+- `app/api/security.py` — two middlewares:
+  - `SecurityMiddleware`: (1) **Host validation** — non-loopback Host
+    headers are rejected (403 `forbidden_origin`), which closes DNS
+    rebinding completely; (2) **Origin validation** — loopback origins on
+    the app's port pass (dashboard), foreign origins (e.g. youtube.com
+    surfaced by `GM_xmlhttpRequest`) are rejected unless they carry
+    `X-Video-Discusser-Client` — a custom header hostile pages cannot attach
+    cross-origin (its CORS preflight is never answered) but the
+    extension-privileged userscript can. Adds `X-Content-Type-Options:
+    nosniff`, `Referrer-Policy: no-referrer`, and a `default-src 'self'`
+    CSP on HTML responses.
+  - `PayloadLimitMiddleware` — bodies over `MAX_REQUEST_BYTES` (1 MiB
+    default) get a structured 413 before parsing.
+- **No CORS middleware, on purpose** (recorded decision): emitting no
+  cross-origin headers is stricter than any allowlist — cross-origin JS can
+  never read responses. **No request token/pairing, on purpose** (decision):
+  Host + Origin + the preflight-immune marker cover the local threat model
+  without key management.
+- Userscript sends the marker header on `GM_xmlhttpRequest`; the dev harness
+  stub passes headers through.
+- Test client: all tests now present a loopback Host via a conftest
+  `TestClient` subclass — the middleware correctly rejected the default
+  `testserver` host as a rebound domain, which is exactly the hardening
+  working.
+
+**Architecture violation found and fixed (roadmap §17 #9, finally closed):**
+route handlers were `async def` while doing **blocking** work (FFmpeg
+subprocesses, inference HTTP calls) — one in-flight discussion froze the
+entire event loop (discovered when even static files stopped serving during
+generation; TestClient's per-request event loops had masked it all along).
+All route handlers are now sync `def` → FastAPI runs them in the threadpool.
+Measured after the fix: health 4–5 ms and static files 64 ms **while a full
+inference was in flight**.
+
+**Hardening checklist (roadmap Sprint 13):**
+
+- [x] Service not listening on LAN interfaces — config-validated loopback
+  host; live `netstat`: `127.0.0.1:8000` only.
+- [x] Unapproved origins rejected — live: `Host: evil.example.com` → 403
+  `forbidden_origin`; foreign Origin without marker → 403; loopback origin
+  on a wrong port → 403.
+- [x] Invalid/oversized payloads fail predictably — 413 envelope before
+  parsing; schema validation for every body (422 envelopes).
+- [x] Cache path traversal fails — Sprint 7 layered defenses re-verified by
+  the existing test matrix.
+- [x] Debug errors not exposed — envelope-only responses; 404s carry no
+  tracebacks (regression-tested).
+- [x] No cloud inference traffic — no cloud endpoints exist in the code;
+  the inference URL is config-validated loopback-only; binding is
+  loopback-only; the evaluation harness and tests run with no network.
+- [x] Subprocess discipline re-verified — argument arrays enforced in
+  `run_command` (type check), `shell=False` throughout.
+
+**Tests run:** `pytest` — 196 passed (179 prior + 17 security tests; the
+conftest TestClient subclass fixed 68 baseline tests the Host check rightly
+rejected). Live: binding/rebinding/marker checks, harness flow, same-origin
+discussion (49.7 s), responsiveness during inference.
+
+**Telemetry note:** generation length varies widely with thinking on
+(1,087 vs 3,434 eval tokens on near-identical prompts; 240 s vs 85 s) — the
+600 s bound held; a `think:false` fast path or answer-length budget remains
+a measured lever for Sprint 14+ if live UX needs it.
+
+**Unverified / deferred:** real Tampermonkey round-trip with the marker
+header (manual checklist); LAN-hostile testing beyond the browser threat
+model (out of scope — single-user local app).

@@ -3,7 +3,7 @@ populated after, per-service states; Sprint 9: inference probe state)."""
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+from conftest import TestClient  # loopback-Host test client
 
 from app.main import create_app
 from app.config import Settings

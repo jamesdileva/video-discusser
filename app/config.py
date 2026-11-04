@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     max_question_chars: int = Field(default=2000, ge=1, le=10000)
     max_chat_turns: int = Field(default=8, ge=1, le=50)
 
+    # --- Local hardening (docs/architecture.md §13) -------------------------
+    # Maximum accepted request body size; anything larger is rejected with a
+    # structured 413 before parsing. Generous for JSON APIs, hostile to abuse.
+    max_request_bytes: int = Field(default=1048576, ge=4096, le=104857600)
+
     @field_validator("local_media_dirs", mode="before")
     @classmethod
     def _split_local_media_dirs(cls, value: object) -> object:

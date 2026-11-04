@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+from conftest import TestClient  # loopback-Host test client
 
 from app.config import Settings
 from app.main import create_app

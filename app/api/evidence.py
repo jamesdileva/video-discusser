@@ -51,7 +51,7 @@ def get_settings_from_state(request: Request) -> Settings:
 
 
 @router.post("/api/evidence/preview", response_model=EvidencePreviewResponse)
-async def preview_evidence(
+def preview_evidence(
     payload: EvidencePreviewRequest,
     request: Request,
     service: ActiveVideoService = Depends(get_active_video_service),

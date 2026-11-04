@@ -20,7 +20,7 @@ def get_frame_store(request: Request) -> FrameStore:
 
 
 @router.get("/api/frames/{frame_id}")
-async def get_frame(
+def get_frame(
     frame_id: str,
     store: FrameStore = Depends(get_frame_store),
 ) -> FileResponse:

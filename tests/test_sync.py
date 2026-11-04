@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi.testclient import TestClient
+from conftest import TestClient  # loopback-Host test client
 from starlette.responses import Response
 
 from app.services.active_video import ActiveVideoService
