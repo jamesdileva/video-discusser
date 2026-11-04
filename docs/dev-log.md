@@ -1125,3 +1125,51 @@ output, two-launch conflict, single-instance cleanup.
 Python/FFmpeg) — assigned to the Sprint 17 full audit; launcher smoke test
 on PowerShell (guide's PowerShell activation path) — commands are standard
 documented PowerShell; flagged for the audit.
+
+## 2026-11-04 — Sprint 17: Release candidate
+
+**Goal:** Freeze a reliable baseline; run the release checklist; tag
+`v0.1.0-rc1`. The full adversarial pre-release audit (agreed 2026-11-03)
+runs immediately after this entry as its own phase.
+
+**Verification (release checklist):**
+
+- [x] All unit and integration tests — 228 passed (includes the
+  skip-guarded live-model test against the real runtime).
+- [x] Fixed evaluation set re-run — **6/6 judged cases passed** (7 total,
+  incl. the favorable RECORD); results refreshed in
+  `data/cache/eval/results.json` (ran_at 2026-11-04 11:06).
+- [x] Manual regression checklist (implementation-guide §8) — executed the
+  live-verifiable items: synthetic sync, local-video frames (cap, monotonic
+  order, in-window, EOF pull-back), health independence from the runtime
+  (second instance with a dead inference URL → `inference: unavailable`
+  while health stays OK), loopback binding, separate error codes for
+  missing-model vs media failures (unit-tested), cache-cleanup safety
+  (unit-tested). **User-only items marked unverified in the RC:** real
+  Tampermonkey pause-sync round-trip and YouTube SPA navigation (manual
+  checklist in `browser/README.md`).
+- [x] Cache cleanup / shutdown / restart behavior — covered by the Sprint 12
+  reliability suite plus three live startup/shutdown cycles (Sprint 12 log).
+- [x] README review — added a **Known limitations (release candidate)**
+  section stating speed, sampling gaps, synthetic evaluation coverage,
+  minute-precision citations, single-user assumptions, and the not-legal-
+  advice boundary honestly.
+- [x] Release candidate tagged — `v0.1.0-rc1` (annotated tag recording the
+  measured profile) and pushed.
+
+**RC finding (fixed in this sprint):** the preflight exposed that **Ollama
+binds 0.0.0.0:11434 by default** — the model runtime was reachable from the
+LAN, violating architecture §13's "backend and model runtime bind to
+loopback" for the runtime half. Added a preflight check that probes the
+machine's LAN addresses and warns with the exact fix
+(`setx OLLAMA_HOST 127.0.0.1`), plus the step in the README setup guide.
+(The backend itself was already loopback-only by config validation.)
+
+**Chosen profile (recorded in the tag):** `qwen3.5:4b` + thinking on,
+`num_ctx` 8192, 6-frame live / 12-frame preview budgets, 768px/q80
+extraction, 600s/120s timeouts — measured in `docs/evaluation-report.md`.
+
+**Full test suite:** 228 passed. **Evaluation:** 6/6 judged + 1 RECORD.
+
+**Unverified / deferred:** Tampermonkey manual checklist (user); pristine
+machine setup pass; both feed the audit below.
