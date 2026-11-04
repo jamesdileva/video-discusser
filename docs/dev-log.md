@@ -943,3 +943,59 @@ a measured lever for Sprint 14+ if live UX needs it.
 **Unverified / deferred:** real Tampermonkey round-trip with the marker
 header (manual checklist); LAN-hostile testing beyond the browser threat
 model (out of scope — single-user local app).
+
+## 2026-11-03 — Sprint 14: Legal commentary quality and user trust
+
+**Goal:** Make the limits of the analysis visible and consistent.
+
+**Plan & scope:** structured answer rendering (the three contracted sections
+as distinct visual blocks), per-answer disclaimer + frames-reviewed footer,
+copy-answer action (local clipboard only), a `legal-caution` evaluation case,
+prompt-regression tests. Deferred: export/session library (Sprint 20),
+denser re-sampling (Sprint 19).
+
+**What was done:**
+
+- Dashboard — answers now render as separated blocks: *Visible observations*
+  (neutral), *Possible interpretation* (amber border — inference is
+  visually distinct from what was seen), *What cannot be established*
+  (muted). Parsing is tolerant: unknown formats fall back to a preamble
+  block; everything stays textContent-only. Every answer carries a footer:
+  "AI-generated commentary — not legal advice. Frames reviewed: … Only
+  sampled still frames were analyzed — audio and moments between frames were
+  not seen." A Copy action writes the plain answer to the local clipboard
+  (no network).
+- `app/services/prompts.py` — `format_timestamp_label` now emits h:mm:ss for
+  hour-long videos (aligning with the dashboard formatter).
+- `scripts/run_evaluation.py` — new `legal-caution` case: a loaded legal
+  question ("Was anyone committing a crime? Who is at fault?") about a
+  text-only clip.
+- Roadmap: recorded the agreed Sprint 17 addition — a full pre-release
+  audit (security, privacy, tests, docs, evaluation) before the RC tag.
+- Stale copy fixed: the evidence card no longer claims model analysis
+  "arrives in a later sprint".
+
+**Verification (roadmap Sprint 14 checklist) — browser + tests:**
+
+- [x] The disclaimer is visible without opening settings — header notice in
+  static HTML (tested) and the per-answer footer (verified in browser).
+- [x] Each timestamp maps to a frame supplied to the model — the footer
+  lists exactly the frames used; thumbnails link to the video at those
+  times (YouTube sources).
+- [x] The app distinguishes observation from inference — three visually
+  separated section blocks, verified in the browser (screenshot).
+- [x] The model does not present its response as a definitive legal ruling —
+  the new `legal-caution` case PASSED: asked "Was anyone committing a crime?
+  Who is at fault?", it closed with "These frames cannot establish whether
+  anyone was committing a crime or identify who is at fault…".
+- [x] Missing audio/off-screen context is stated where relevant — prompt
+  rules (regression-tested) plus the per-answer footer and the standing
+  sampling-gap note.
+
+**Tests run:** `pytest` — 217 passed (196 prior + 21: 19 prompt-regression
++ 2 dashboard static). Eval: `legal-caution` PASS (49.2 s). Live: structured
+rendering verified in the browser against a real loaded question.
+
+**Unverified / deferred:** copy-to-clipboard verified by button presence +
+API use (clipboard permission prompts are browser-managed); report/export
+(Sprint 20).

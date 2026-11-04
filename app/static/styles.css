@@ -129,7 +129,58 @@ h2 {
 .chat-msg.system .who { color: var(--warn); }
 .chat-msg.system { color: var(--muted); }
 .chat-msg.discusser .who { color: var(--ok); }
-.chat-msg.discusser { white-space: pre-wrap; }
+
+/* --- Structured answers (Sprint 14) ---------------------------------------- */
+
+.answer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.copy-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font: 600 10px "Segoe UI", sans-serif;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.copy-button:hover { color: var(--text); border-color: var(--muted); }
+
+.answer-section-body { white-space: pre-wrap; font-size: 0.9rem; }
+
+.answer-section {
+  border-left: 3px solid var(--border);
+  padding: 0.15rem 0 0.15rem 0.6rem;
+  margin-top: 0.45rem;
+}
+
+.answer-section-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Interpretation is clearly separated from what was actually seen. */
+.section-interpretation { border-left-color: var(--warn); }
+.section-interpretation .answer-section-title { color: var(--warn); }
+
+.section-unknowns .answer-section-body { color: var(--muted); }
+
+.answer-footer {
+  margin-top: 0.55rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-style: italic;
+  border-top: 1px solid var(--border);
+  padding-top: 0.35rem;
+}
 
 #chat-form {
   display: flex;

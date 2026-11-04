@@ -43,9 +43,14 @@ This is commentary and research assistance, not legal advice.\
 
 
 def format_timestamp_label(seconds: float) -> str:
-    """m:ss label for prompts — matches what the model is asked to cite."""
+    """m:ss (or h:mm:ss) label for prompts — matches what the model is asked
+    to cite and the dashboard's timestamp formatting."""
     total = int(seconds)
-    return f"{total // 60}:{total % 60:02d}"
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
 
 
 def build_user_prompt(

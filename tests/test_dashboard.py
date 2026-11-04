@@ -62,6 +62,27 @@ def test_app_js_wires_evidence_preview(client: TestClient) -> None:
     assert "miss events between them" in html
 
 
+def test_app_js_renders_structured_answers(client: TestClient) -> None:
+    """Sprint 14: answers render as separated sections with a disclaimer
+    footer and a copy action — all textContent, never HTML."""
+    js = client.get("/app.js").text
+    assert "parseAnswerSections" in js
+    assert "Possible interpretation" in js
+    assert "What cannot be established" in js
+    assert "AI-generated commentary — not legal advice" in js
+    assert "Only sampled still frames were analyzed" in js
+    assert "navigator.clipboard.writeText" in js  # local clipboard only
+    for sink in FORBIDDEN_JS_SINKS:
+        assert sink not in js
+
+
+def test_disclaimer_visible_in_static_html(client: TestClient) -> None:
+    """The notice must be visible without opening settings."""
+    html = client.get("/").text
+    assert "not legal advice" in html
+    assert 'class="notice"' in html
+
+
 def test_app_js_uses_textcontent_only(client: TestClient) -> None:
     resp = client.get("/app.js")
     assert resp.status_code == 200

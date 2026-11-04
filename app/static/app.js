@@ -327,6 +327,113 @@
 
   let chatInFlight = false;
 
+  // Sprint 14: the model answers in the three contracted sections; parse
+  // them so observations, interpretation, and unknowns render distinctly.
+  const SECTION_PATTERNS = [
+    { key: "interpretation", re: /^possible interpretation\b:?/i, title: "Possible interpretation" },
+    { key: "unknowns", re: /^what cannot be established\b:?/i, title: "What cannot be established from these frames" },
+    { key: "observations", re: /^visible observations\b:?/i, title: "Visible observations" },
+  ];
+
+  function parseAnswerSections(answer) {
+    const sections = [];
+    let current = null;
+    answer.split("\n").forEach(function (line) {
+      const trimmed = line.trim();
+      const match = SECTION_PATTERNS.find(function (p) {
+        return p.re.test(trimmed);
+      });
+      if (match) {
+        current = { key: match.key, title: match.title, body: [] };
+        sections.push(current);
+        return;
+      }
+      if (current) {
+        current.body.push(line);
+      } else if (trimmed) {
+        // Preamble before the first section heading.
+        if (!sections.length || sections[0].key !== "preamble") {
+          sections.unshift({ key: "preamble", title: null, body: [] });
+        }
+        sections[0].body.push(line);
+      }
+    });
+    return sections.map(function (s) {
+      return { key: s.key, title: s.title, body: s.body.join("\n").trim() };
+    });
+  }
+
+  function appendDiscusserMessage(answer, framesUsed) {
+    if (chatStarted) {
+      els["chat-log"].classList.remove("empty");
+    }
+    const msg = document.createElement("div");
+    msg.className = "chat-msg discusser";
+
+    const header = document.createElement("div");
+    header.className = "answer-header";
+    const who = document.createElement("span");
+    who.className = "who";
+    setText(who, "Discusser:");
+    header.appendChild(who);
+    const copyButton = document.createElement("button");
+    copyButton.className = "copy-button";
+    setText(copyButton, "Copy");
+    copyButton.title = "Copy the full answer text (local clipboard only)";
+    copyButton.addEventListener("click", function () {
+      navigator.clipboard.writeText(answer).then(
+        function () {
+          setText(copyButton, "Copied ✓");
+          setTimeout(function () {
+            setText(copyButton, "Copy");
+          }, 1500);
+        },
+        function () {
+          setText(copyButton, "Copy failed");
+        }
+      );
+    });
+    header.appendChild(copyButton);
+    msg.appendChild(header);
+
+    parseAnswerSections(answer).forEach(function (section) {
+      const block = document.createElement("div");
+      block.className = "answer-section section-" + section.key;
+      if (section.title) {
+        const title = document.createElement("div");
+        title.className = "answer-section-title";
+        setText(title, section.title);
+        block.appendChild(title);
+      }
+      const body = document.createElement("div");
+      body.className = "answer-section-body";
+      setText(body, section.body || "(nothing stated)");
+      block.appendChild(body);
+      msg.appendChild(block);
+    });
+
+    // The trust footer: limits stated on every answer, without opening
+    // anything (roadmap Sprint 14 verification).
+    const footer = document.createElement("div");
+    footer.className = "answer-footer";
+    const labels = framesUsed.map(function (f) {
+      return formatTimestamp(f.timestamp_seconds);
+    });
+    setText(
+      footer,
+      "AI-generated commentary — not legal advice. Frames reviewed: " +
+        (labels.length ? labels.join(", ") : "none") +
+        ". Only sampled still frames were analyzed — audio and moments between frames were not seen."
+    );
+    msg.appendChild(footer);
+
+    els["chat-log"].appendChild(msg);
+    while (els["chat-log"].children.length > CHAT_HISTORY_LIMIT) {
+      els["chat-log"].removeChild(els["chat-log"].firstChild);
+    }
+    els["chat-log"].scrollTop = els["chat-log"].scrollHeight;
+  }
+
   function setChatInFlight(inFlight) {
     chatInFlight = inFlight;
     if (els["ask-button"] && els["question-input"]) {
@@ -377,7 +484,7 @@
       markPreviewStaleForState(
         lastKnownStatus ? lastKnownStatus.active_video : null
       );
-      appendChatMessage("discusser", "Discusser", body.answer);
+      appendDiscusserMessage(body.answer, body.frames_used);
       if (body.revision_changed) {
         appendChatMessage(
           "system",

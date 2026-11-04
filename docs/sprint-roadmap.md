@@ -545,6 +545,10 @@ Make the app reproducible on the target Windows PC.
 ### Goal
 Freeze a reliable baseline before adding ambitious features.
 
+> **Agreed 2026-11-03:** Sprint 17 will additionally include a **full
+> pre-release audit** — security, privacy, tests, docs, and the evaluation
+> set — before tagging the release candidate.
+
 ### Tasks
 1. Run all unit and integration tests.
 2. Run the full manual checklist on the target PC.
