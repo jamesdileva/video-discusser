@@ -318,6 +318,85 @@ h2 {
   cursor: pointer;
 }
 
+/* --- History (Sprint 15) ----------------------------------------------------- */
+
+.history-list { display: grid; gap: 0.4rem; margin-top: 0.5rem; }
+
+.history-row { display: flex; align-items: stretch; gap: 0.4rem; }
+
+.history-open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.history-open:hover { border-color: var(--muted); }
+
+.history-title { color: var(--text); font-size: 0.9rem; font-weight: 600; }
+.history-meta { color: var(--muted); font-size: 0.75rem; }
+
+.history-delete {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 0 0.6rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.history-delete:hover { color: var(--bad); border-color: var(--bad); }
+
+.history-detail {
+  margin-top: 0.6rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.history-detail-heading {
+  font-size: 0.8rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.3rem;
+}
+
+.history-message .history-message-who {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.history-message.role-answer .history-message-who { color: var(--ok); }
+.history-message .history-message-body {
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.history-actions { margin-top: 0.6rem; display: flex; align-items: center; gap: 0.6rem; }
+
+.danger-button {
+  background: transparent;
+  border: 1px solid var(--bad);
+  border-radius: 8px;
+  color: var(--bad);
+  font: 600 0.78rem "Segoe UI", sans-serif;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
 /* --- Utilities ------------------------------------------------------------- */
 
 .hidden { display: none !important; }

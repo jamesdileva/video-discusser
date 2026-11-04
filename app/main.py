@@ -32,6 +32,7 @@ from app.api import sync as sync_api
 from app.api import discussion as discussion_api
 from app.api import evidence as evidence_api
 from app.api import frames as frames_api
+from app.api import sessions as sessions_api
 from app.api.errors import install_error_handlers
 from app.api.security import PayloadLimitMiddleware, SecurityMiddleware
 from app.config import Settings, get_settings
@@ -39,6 +40,7 @@ from app.services.active_video import ActiveVideoService
 from app.services.discussion import DiscussionService
 from app.services.frame_extraction import FrameStore
 from app.services.inference import OllamaInferenceAdapter
+from app.services.session_store import SessionStore
 
 _request_id: ContextVar[str] = ContextVar("request_id", default="-")
 
@@ -102,6 +104,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging()
     frame_store = FrameStore(settings.cache_dir)
     inference_adapter = OllamaInferenceAdapter(settings)
+    session_store = SessionStore(settings.sessions_dir, enabled=settings.sessions_enabled)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -142,6 +145,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(frames_api.router)
     app.include_router(evidence_api.router)
     app.include_router(discussion_api.router)
+    app.include_router(sessions_api.router)
     install_error_handlers(app)
     app.state.active_video = ActiveVideoService()
     app.state.media_sources = MediaSourceRegistry(
@@ -151,12 +155,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.pipeline_lock = threading.Lock()
     app.state.inference_adapter = inference_adapter
+    app.state.session_store = session_store
     app.state.discussion_service = DiscussionService(
         settings=settings,
         active_video=app.state.active_video,
         media_sources=app.state.media_sources,
         frame_store=frame_store,
         inference=inference_adapter,
+        session_store=session_store,
     )
 
     if settings.app_env == "development":

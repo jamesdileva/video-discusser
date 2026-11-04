@@ -27,6 +27,7 @@ def make_client(tmp_path: Path) -> tuple[TestClient, Path]:
     shutil.copy(FIXTURE_CLIP, media_root / "sample.mp4")
     settings = Settings(
         cache_dir=tmp_path / "cache",
+        sessions_dir=tmp_path / "sessions",
         local_media_dirs=[media_root],
         _env_file=None,  # type: ignore[call-arg]
     )

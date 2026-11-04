@@ -999,3 +999,67 @@ rendering verified in the browser against a real loaded question.
 **Unverified / deferred:** copy-to-clipboard verified by button presence +
 API use (clipboard permission prompts are browser-managed); report/export
 (Sprint 20).
+
+## 2026-11-04 — Sprint 15: Sessions and local persistence
+
+**Goal:** Persist useful discussions — the user explicitly opted this into
+the MVP (2026-11-03).
+
+**Plan & scope:** versioned SQLite store (`data/sessions/`, stdlib `sqlite3`,
+WAL); one session per video, Q/A pairs with frame references (opaque IDs +
+cache-relative paths only); read-only history API + deletion with
+cache-eligible frame cleanup; History card in the dashboard;
+`SESSIONS_ENABLED` toggle. Deferred: resuming a historical video as active
+(post-MVP), export (Sprint 20), multi-device anything (out of scope).
+
+**What was done:**
+
+- `app/services/session_store.py` — `PRAGMA user_version` schema versioning
+  (v1; newer databases are refused, not corrupted), foreign keys +
+  `ON DELETE CASCADE`, thread-locked connection. `record_discussion`
+  get-or-creates the per-video session and appends the Q/A pair; all store
+  failures are swallowed and logged — **recording problems can never break a
+  discussion or the active sync state**.
+- `app/api/sessions.py` — list / detail / delete-one / clear-all. Deletion
+  computes frames the deleted session referenced, keeps those still
+  referenced elsewhere, and removes the rest from the cache through the new
+  `FrameStore.delete_frames`.
+- `DiscussionService` — records successful discussions (never failures);
+  `sessions_enabled=false` or a broken store degrades to no-op.
+- Dashboard — History card: session rows (title, message count, last
+  activity), click to expand read-only Q/A detail, per-row delete, Clear
+  all. The list refreshes automatically after each answered question.
+
+**Verification (roadmap Sprint 15 checklist):**
+
+- [x] Sessions survive restart — unit test with a fresh store instance and
+  a live restart (history persisted across the backend process restart).
+- [x] Delete removes the intended records and associated eligible cache —
+  API test (frames 404 after delete) and live UI delete ("Deleted.", list
+  empty).
+- [x] Database errors do not corrupt active sync state — broken-connection
+  test: `record_discussion` returns None and the discussion flow is
+  unaffected; store init failures degrade to log-only.
+- [x] No raw media retained without explicit choice — only Q/A text and
+  frame *references* are stored; frame files remain governed by the cache
+  policy and are deleted when unreferenced after session deletion.
+
+**Bugs and lessons during the sprint:**
+
+1. **Test-data leak into developer data:** the test helpers built `Settings`
+   without `sessions_dir`, so every pytest discussion wrote into the real
+   `data/sessions` DB (the same class of default-path leak as the Sprint 15
+   env parsing issue). All test settings now isolate `sessions_dir`; the
+   polluted dev DB was cleared (it contained only test debris).
+2. **SQLite WAL resurrection:** deleting the DB files while the server held
+   them open let the WAL checkpoint restore the old rows on restart —
+   stop-server-first is the correct procedure (recorded here for ops).
+3. A stale-tab confusion during verification (two dashboard tabs) was a
+   checking mistake, not a product bug.
+
+**Tests run:** `pytest` — 227 passed (217 prior + 10 new). Live: discussion
+recorded → History card listed it → detail opened (Q/A with timestamps and
+snapshot revision) → UI delete cleared records and cache.
+
+**Unverified / deferred:** resuming a historical video as the active one;
+export; concurrent multi-tab history edits (single-user assumption).

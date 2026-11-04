@@ -86,6 +86,20 @@
       contain no audio. Answers appear in the Discussion card below.</p>
     </section>
 
+    <section class="card" aria-labelledby="history-h">
+      <h2 id="history-h">History</h2>
+      <p class="meta">Past discussions, stored locally in your browser's
+      machine only. Nothing is sent anywhere.</p>
+      <div id="history-list" class="history-list" aria-live="polite"></div>
+      <div id="history-detail" class="history-detail hidden"></div>
+      <div class="history-actions">
+        <button id="history-clear-button" type="button" class="danger-button">
+          Clear all history
+        </button>
+        <span id="history-status" class="meta" role="status"></span>
+      </div>
+    </section>
+
     <section class="card" aria-labelledby="chat-h">
       <h2 id="chat-h">Discussion</h2>
       <div id="chat-log" class="chat-log empty" aria-live="polite">
@@ -104,6 +118,6 @@
   </main>
   <!-- Version query busts aggressive caches; the backend also sends
        Cache-Control: no-cache (see NoCacheStaticFiles). -->
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

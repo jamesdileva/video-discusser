@@ -72,12 +72,14 @@ class DiscussionService:
         media_sources,  # MediaSourceRegistry
         frame_store: FrameStore,
         inference: OllamaInferenceAdapter,
+        session_store=None,  # SessionStore | None (Sprint 15)
     ) -> None:
         self._settings = settings
         self._active = active_video
         self._media_sources = media_sources
         self._frame_store = frame_store
         self._inference = inference
+        self._session_store = session_store
 
     def discuss(
         self,
@@ -177,6 +179,24 @@ class DiscussionService:
         # the answer still belongs to the snapshot it was built against.
         current = self._active.snapshot()
         revision_changed = bool(current and current.revision != snapshot.revision)
+
+        # Persist the Q/A pair. Recording failures never break the discussion
+        # (the store swallows and logs its own errors).
+        session_id = None
+        if self._session_store is not None:
+            session_id = self._session_store.record_discussion(
+                video_id=snapshot.video_id,
+                video_url=snapshot.url,
+                source=snapshot.source,
+                title=snapshot.title,
+                model_id=result.model_id,
+                question=cleaned,
+                answer=result.answer,
+                snapshot_revision=snapshot.revision,
+                window_start_seconds=plan.window_start_seconds,
+                window_end_seconds=plan.window_end_seconds,
+                frames=list(batch.frames),
+            )
 
         elapsed = time.perf_counter() - started
         LOGGER.info(

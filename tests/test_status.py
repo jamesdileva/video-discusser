@@ -23,7 +23,8 @@ class StubInferenceAdapter:
 
 
 def make_client_with_inference(tmp_path, state: str) -> TestClient:
-    settings = Settings(cache_dir=tmp_path / "cache", _env_file=None)  # type: ignore[call-arg]
+    settings = Settings(cache_dir=tmp_path / "cache",
+        sessions_dir=tmp_path / "sessions", _env_file=None)  # type: ignore[call-arg]
     client = TestClient(create_app(settings))
     client.app.state.inference_adapter = StubInferenceAdapter(state)  # type: ignore[attr-defined]
     return client

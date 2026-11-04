@@ -137,6 +137,29 @@ class FrameStore:
             return None
         return candidate
 
+    def registered_frame_ids(self) -> set[str]:
+        """All frame IDs currently indexed (used for cache-eligibility math)."""
+        with self._lock:
+            return set(self._records.keys())
+
+    def delete_frames(self, frame_ids: list[str]) -> int:
+        """Delete specific cached frames by ID (registry + file). Used when a
+        session is deleted and its frames are no longer referenced. Returns
+        the number of files actually removed."""
+        removed = 0
+        for frame_id in frame_ids:
+            path = self.resolve_path(frame_id)
+            if path is None or not path.is_file():
+                continue
+            try:
+                path.unlink(missing_ok=True)
+                with self._lock:
+                    self._records.pop(frame_id, None)
+                removed += 1
+            except OSError:
+                continue
+        return removed
+
     def load_from_disk(self) -> int:
         """Re-index stored batches after a restart. Returns records loaded."""
         if not self._frames_dir.is_dir():

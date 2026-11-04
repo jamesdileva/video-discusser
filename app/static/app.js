@@ -25,6 +25,7 @@
     "window-select", "preview-button", "preview-stage", "preview-window",
     "frames-strip", "preview-stale", "preview-warning",
     "chat-log", "chat-form", "question-input", "ask-button",
+    "history-list", "history-detail", "history-clear-button", "history-status",
   ].forEach(function (id) {
     els[id] = document.getElementById(id);
   });
@@ -485,6 +486,7 @@
         lastKnownStatus ? lastKnownStatus.active_video : null
       );
       appendDiscusserMessage(body.answer, body.frames_used);
+      loadSessions(); // the new Q/A pair is persisted — refresh the list
       if (body.revision_changed) {
         appendChatMessage(
           "system",
@@ -546,6 +548,153 @@
     if (!document.hidden) poll(); // immediate refresh when returning
   }
 
+  // --- history (Sprint 15): local-only persisted discussions --------------------
+
+  function formatClockShort(iso) {
+    const date = new Date(iso);
+    return isNaN(date) ? iso : date.toLocaleString([], { hour12: false });
+  }
+
+  async function loadSessions() {
+    if (!els["history-list"]) return;
+    try {
+      const resp = await fetch("/api/sessions", { headers: { Accept: "application/json" } });
+      if (!resp.ok) return;
+      const body = await resp.json();
+      renderSessionList(body);
+    } catch (err) {
+      /* history is non-critical; leave the previous view */
+    }
+  }
+
+  function renderSessionList(body) {
+    const list = els["history-list"];
+    list.replaceChildren();
+    setHidden(els["history-clear-button"], !body.enabled || body.sessions.length === 0);
+    if (!body.enabled) {
+      const note = document.createElement("p");
+      note.className = "meta";
+      setText(note, "History is disabled in configuration.");
+      list.appendChild(note);
+      return;
+    }
+    if (!body.sessions.length) {
+      const note = document.createElement("p");
+      note.className = "meta";
+      setText(note, "No discussions yet.");
+      list.appendChild(note);
+      return;
+    }
+    body.sessions.forEach(function (session) {
+      const row = document.createElement("div");
+      row.className = "history-row";
+      const main = document.createElement("button");
+      main.className = "history-open";
+      main.title = "View this discussion";
+      const title = document.createElement("span");
+      title.className = "history-title";
+      setText(title, session.title || session.video_id);
+      const meta = document.createElement("span");
+      meta.className = "history-meta";
+      setText(
+        meta,
+        session.message_count + " msg · " + formatClockShort(session.last_activity_at)
+      );
+      main.appendChild(title);
+      main.appendChild(meta);
+      main.addEventListener("click", function () {
+        openSession(session.session_id);
+      });
+      const del = document.createElement("button");
+      del.className = "history-delete";
+      del.title = "Delete this discussion";
+      setText(del, "✕");
+      del.addEventListener("click", function () {
+        deleteSession(session.session_id);
+      });
+      row.appendChild(main);
+      row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+
+  async function openSession(sessionId) {
+    setHidden(els["history-detail"], false);
+    setText(els["history-detail"], "Loading…");
+    try {
+      const resp = await fetch("/api/sessions/" + encodeURIComponent(sessionId), {
+        headers: { Accept: "application/json" },
+      });
+      if (!resp.ok) {
+        setText(els["history-detail"], "Could not load the session.");
+        return;
+      }
+      const body = await resp.json();
+      els["history-detail"].replaceChildren();
+      const heading = document.createElement("div");
+      heading.className = "history-detail-heading";
+      setText(
+        heading,
+        (body.session.title || body.session.video_id) +
+          " — " + body.session.message_count + " messages · model " + body.session.model_id
+      );
+      els["history-detail"].appendChild(heading);
+      body.messages.forEach(function (message) {
+        const block = document.createElement("div");
+        block.className = "history-message role-" + message.role;
+        const who = document.createElement("div");
+        who.className = "history-message-who";
+        setText(
+          who,
+          (message.role === "question" ? "Question" : "Answer") +
+            " · " + formatClockShort(message.created_at) +
+            " · snapshot #" + message.snapshot_revision
+        );
+        const content = document.createElement("div");
+        content.className = "history-message-body";
+        setText(content, message.content);
+        block.appendChild(who);
+        block.appendChild(content);
+        els["history-detail"].appendChild(block);
+      });
+    } catch (err) {
+      setText(els["history-detail"], "Could not load the session.");
+    }
+  }
+
+  async function deleteSession(sessionId) {
+    try {
+      const resp = await fetch("/api/sessions/" + encodeURIComponent(sessionId), {
+        method: "DELETE",
+      });
+      if (!resp.ok) {
+        setText(els["history-status"], "Delete failed.");
+        return;
+      }
+      setText(els["history-status"], "Deleted.");
+      setHidden(els["history-detail"], true);
+      loadSessions();
+    } catch (err) {
+      setText(els["history-status"], "Delete failed — backend unreachable.");
+    }
+  }
+
+  async function clearAllSessions() {
+    try {
+      const resp = await fetch("/api/sessions", { method: "DELETE" });
+      if (!resp.ok) {
+        setText(els["history-status"], "Clear failed.");
+        return;
+      }
+      const body = await resp.json();
+      setText(els["history-status"], "Cleared " + body.cleared_sessions + " session(s).");
+      setHidden(els["history-detail"], true);
+      loadSessions();
+    } catch (err) {
+      setText(els["history-status"], "Clear failed — backend unreachable.");
+    }
+  }
+
   function init() {
     if (els["chat-form"]) els["chat-form"].addEventListener("submit", onChatSubmit);
     if (els["preview-button"]) {
@@ -565,6 +714,10 @@
       });
     }
     document.addEventListener("visibilitychange", onVisibilityChange);
+    if (els["history-clear-button"]) {
+      els["history-clear-button"].addEventListener("click", clearAllSessions);
+    }
+    loadSessions();
     loadVersionOnce();
     poll();
   }

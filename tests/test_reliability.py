@@ -26,6 +26,7 @@ pytestmark = pytest.mark.skipif(
 def make_settings(tmp_path: Path) -> Settings:
     return Settings(
         cache_dir=tmp_path / "cache",
+        sessions_dir=tmp_path / "sessions",
         local_media_dirs=[tmp_path / "videos"],
         _env_file=None,  # type: ignore[call-arg]
     )

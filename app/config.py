@@ -95,6 +95,12 @@ class Settings(BaseSettings):
     # structured 413 before parsing. Generous for JSON APIs, hostile to abuse.
     max_request_bytes: int = Field(default=1048576, ge=4096, le=104857600)
 
+    # --- Sessions (Sprint 15) -----------------------------------------------
+    # Persist discussion history to a local SQLite database under data/sessions/.
+    # Raw video is never stored; frames remain in the bounded cache.
+    sessions_enabled: bool = True
+    sessions_dir: Path = Path("./data/sessions")
+
     @field_validator("local_media_dirs", mode="before")
     @classmethod
     def _split_local_media_dirs(cls, value: object) -> object:
