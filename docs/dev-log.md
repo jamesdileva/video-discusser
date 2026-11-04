@@ -1063,3 +1063,65 @@ snapshot revision) → UI delete cleared records and cache.
 
 **Unverified / deferred:** resuming a historical video as the active one;
 export; concurrent multi-tab history edits (single-user assumption).
+
+## 2026-11-04 — Sprint 16: Setup experience and packaging
+
+**Goal:** Make the app reproducible on the target Windows PC.
+
+**Plan & scope:** full README setup guide with verified versions; preflight
+upgrades (model-pulled check, double-launch detection, copyable
+`--diagnostics`); config-driven `scripts/serve.py` launcher; packaging
+decision. Deferred: Electron-style desktop packaging (decision: remain a
+local web dashboard for the MVP; revisit after the release-candidate audit).
+
+**What was done:**
+
+- `scripts/check_environment.py` — three additions: (1) **model-pulled
+  check** — queries the runtime's model list and warns with the exact
+  `ollama pull` command when the configured model is absent ("the app does
+  not claim model-ready if the runtime is unavailable"); (2)
+  **double-launch detection** — reports whether the configured port is free,
+  already serving a Video Discusser instance, or occupied by another
+  program; (3) **`--diagnostics` mode** — a fenced, copyable support block
+  containing config summary, preflight, and live health/status, explicitly
+  omitting question text, video URLs, and local paths.
+- `scripts/serve.py` — launch the backend from `.env`'s `APP_HOST`/
+  `APP_PORT` (single source of truth; no flag drift). Unit-tested: host/port
+  passed to uvicorn come from Settings.
+- `README.md` — a complete Windows setup guide: prerequisites with
+  install commands, verified-version table, venv + editable install, minimal
+  `.env`, preflight, model pull, backend launch, dashboard/first-use
+  walkthrough (local file + YouTube), and a troubleshooting table mapping
+  the preflight's failure messages to fixes.
+- Packaging decision recorded (README §9 + here): local web dashboard for
+  the MVP; runtime/model installation remains an explicit separate concern.
+
+**Verification (roadmap Sprint 16 checklist):**
+
+- [x] A clean environment can follow the guide from scratch — every command
+  in the guide was executed in order on this machine (clone step exercised
+  by the repo's existence; venv/install re-run idempotently; `.env` copy,
+  preflight, model pull, serve, dashboard, sync, ask all verified across
+  Sprints 6–15 sessions). A truly pristine-machine pass (no Python/FFmpeg
+  preinstalled) remains a manual item for the RC audit.
+- [x] Missing dependencies are named clearly — preflight FAIL/WARN lines
+  carry exact install commands (`winget install Gyan.FFmpeg`,
+  `ollama pull qwen3.5:4b`, `pip install yt-dlp`).
+- [x] The app does not claim model-ready if the runtime is unavailable —
+  dashboard probe reports `unavailable`; preflight distinguishes runtime
+  down vs model not pulled.
+- [x] Launching twice does not silently conflict — second `serve.py` exits 3
+  with `[Errno 10048] only one usage of each socket address`; preflight
+  detects the running instance beforehand.
+- [x] Existing features remain intact — full suite green (228 passed,
+  including the new serve test); backend still serving after all script
+  changes.
+
+**Tests run:** `pytest` — 228 passed (227 prior + 1 serve test). Live:
+preflight (with running backend → double-launch warning path), diagnostics
+output, two-launch conflict, single-instance cleanup.
+
+**Unverified / deferred:** pristine-machine setup pass (no preinstalled
+Python/FFmpeg) — assigned to the Sprint 17 full audit; launcher smoke test
+on PowerShell (guide's PowerShell activation path) — commands are standard
+documented PowerShell; flagged for the audit.
