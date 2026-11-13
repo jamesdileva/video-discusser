@@ -136,12 +136,40 @@ establish something.
 | Port already in use on launch | Another instance is running — use it, or change `APP_PORT` |
 | YouTube sync pill says *rejected* | Check the backend log; the pill shows the stable error code |
 
-### 9. Packaging decision
+### 9. Desktop app (packaging)
 
-The app remains a **local web dashboard** (browser + local backend) for the
-MVP. Desktop packaging (Electron-style) is deferred until after the
-release-candidate audit; model/runtime installation stays a separate,
-explicit concern either way.
+The same app ships as a **native desktop build**: a WebView2 window around
+the identical loopback backend — every dashboard capability is preserved
+because it *is* the dashboard.
+
+From source (windowed):
+
+```powershell
+pip install -e ".[desktop]"
+python scripts/desktop.py
+```
+
+Packaged executable (onedir; Ollama, model weights, and FFmpeg stay separate
+installations):
+
+```powershell
+pip install -e ".[packaging]"
+python -m PyInstaller --clean --noconfirm packaging/video-discusser.spec
+.\dist\VideoDiscusser\VideoDiscusser.exe
+```
+
+Behavior notes: the window opens only after the backend reports healthy;
+closing it shuts the backend down cleanly; packaged logs land in
+`data/logs/backend.log`; `.env` is read from the working directory of the
+exe. `python scripts/desktop.py --server-only` runs the backend without a
+window (headless verification).
+
+### 10. Packaging decision (history)
+
+The MVP shipped as a **local web dashboard** (browser + local backend);
+desktop packaging was deferred until after the release-candidate audit
+(2026-11-04) and then shipped as the WebView2 wrapper above. Model/runtime
+installation remains a separate, explicit concern either way.
 
 ## Requirements
 

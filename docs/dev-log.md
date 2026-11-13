@@ -1173,3 +1173,67 @@ extraction, 600s/120s timeouts — measured in `docs/evaluation-report.md`.
 
 **Unverified / deferred:** Tampermonkey manual checklist (user); pristine
 machine setup pass; both feed the audit below.
+
+
+## 2026-11-13 — Sprint 22 (pulled forward to position 18 at user request): Desktop packaging
+
+**Goal:** Ship the app as a desktop application without losing any
+web-dashboard capability.
+
+**Deviation from the numbered order (recorded per AGENTS.md):** desktop
+packaging is roadmap Sprint 22; the user pulled it forward ahead of roadmap
+Sprints 18–21 (transcript, temporal reasoning, export, extra sources), which
+remain queued. The audit prerequisite (roadmap: decide packaging only after
+MVP stability + RC audit) is satisfied — the audit completed 2026-11-04.
+
+**Packaging decision (roadmap allowed "Electron or another desktop
+wrapper"):** **pywebview/WebView2 window around the identical loopback
+backend, packaged with PyInstaller (onedir)** — chosen over Electron for a
+zero-Node-toolchain, Python-native stack with a tiny footprint. Every
+dashboard capability is preserved because the desktop app *is* the dashboard
+on the same port. Ollama, model weights, and FFmpeg are deliberately NOT
+bundled (roadmap constraint) — separate installations, documented.
+
+**What was done:**
+
+- `app/desktop.py` — entrypoint: uvicorn in a named daemon thread, health
+  poll before the window opens, `stop_backend` joins the thread (clean
+  shutdown), `--server-only` headless mode, frozen-mode file logging
+  (`data/logs/backend.log`, rotating, request-ID-correlated), lazy pywebview
+  import so headless runs need no GUI stack.
+- `scripts/desktop.py` — dev shim; same file is the PyInstaller entry.
+- `pyproject.toml` — `desktop` (pywebview) and `packaging` (pyinstaller +
+  pywebview) extras.
+- `packaging/video-discusser.spec` — onedir build; `app/static` bundled as
+  data; `console=False`; Ollama/FFmpeg/weights excluded by design.
+- `.gitignore` already covered `build/` + `dist/`.
+- Roadmap annotated (Sprint 22 pulled forward + completed).
+
+**Bugs caught during packaging:** the first exe run crashed with
+`NameError: Path` — `attach_file_logging` runs only when frozen
+(`sys.frozen`), so the missing import was invisible in every dev run. Fixed;
+rebuild verified.
+
+**Verification (roadmap Sprint 22 checklist):**
+
+- [x] Dashboard capabilities preserved — the packaged exe serves the same
+  app on the same port; health + dashboard HTML verified against the exe.
+- [x] Backend lifecycle managed cleanly — health-before-window contract
+  unit-tested (thread starts, becomes healthy, joins on stop); exe
+  start/health/kill cycle verified.
+- [x] Ports/logs/cache/shutdown predictable — loopback-only binding verified
+  against the exe; frozen file log written and format-correct; cache comes
+  from the working directory; double-launch fails loudly (Sprint 16
+  behavior, unchanged).
+- [x] Installer does not expose the backend on the LAN — exe binding
+  verified `127.0.0.1` only (the separate Ollama LAN-binding guidance from
+  Sprint 17 applies to the runtime).
+
+**Tests run:** `pytest` — 234 passed (232 prior + 2 desktop lifecycle
+tests). Live: `scripts/desktop.py --server-only` lifecycle, PyInstaller
+build, exe health/dashboard/binding/log/shutdown.
+
+**Unverified / deferred:** interactive window close (the ✕ button) verified
+by the unit-tested shutdown contract rather than a manual click; onefile
+build and an installer (e.g. Inno Setup) remain options; pristine-machine
+exe test (no Python installed) — all noted for the next iteration.

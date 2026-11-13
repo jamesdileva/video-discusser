@@ -22,6 +22,15 @@ dependencies = [
 dev = [
     "pytest==9.2.0",
 ]
+# Desktop app: a native window (WebView2) around the same loopback backend.
+desktop = [
+    "pywebview==6.2.1",
+]
+# Build tools for the packaged exe (packaging/video-discusser.spec).
+packaging = [
+    "pyinstaller==6.22.3",
+    "pywebview==6.2.1",
+]
 
 [tool.setuptools]
 packages = ["app", "app.adapters", "app.api", "app.schemas", "app.services"]

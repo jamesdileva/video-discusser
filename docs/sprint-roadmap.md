@@ -613,6 +613,12 @@ Verification:
 
 ## Sprint 22 — Desktop packaging
 
+> **Pulled forward and completed 2026-11-13** (user request, post-RC): shipped as a
+> pywebview/WebView2 window around the loopback backend + PyInstaller onedir build
+> (`packaging/video-discusser.spec`) instead of Electron — Electron-style wrappers
+> remain an option if a single-file installer distribution is ever needed. Deviation
+> from the numbered order recorded in docs/dev-log.md.
+
 Consider Electron or another desktop wrapper if users need a single-window experience. Do not bundle model weights by default; their size, license, and hardware requirements should remain separate.
 
 Verification:
