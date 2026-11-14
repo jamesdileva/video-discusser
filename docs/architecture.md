@@ -238,7 +238,7 @@ Never send arbitrary local paths to the browser. The API should expose an applic
 - `question: str` (trimmed, non-empty, bounded length)
 - `window_seconds: int | None` (defaults to configured window)
 - `max_frames: int | None` (clamped to configured maximum)
-- `include_audio_transcript: bool = false` (reserved for a later phase; not implemented in MVP)
+- `include_audio_transcript: bool | None` (Sprint 18: transcript text — sidecar subtitles or captions, local metadata only — is included when available; `false` forces the frames-only workflow. Local speech-to-text is a separate, unevaluated future concern.)
 
 ### DiscussionResponse
 
@@ -250,8 +250,9 @@ Never send arbitrary local paths to the browser. The API should expose an applic
 - `frames_used: list[FrameReference]`
 - `warnings: list[str]`
 - `request_id: str`
+- `transcript_used: bool`, `transcript_segment_count: int` (Sprint 18: whether attributed transcript segments were supplied with the prompt)
 
-The response should make the evidence window inspectable and allow the UI to link each cited timestamp to the original video.
+The response should make the evidence window inspectable and allow the UI to link each cited timestamp to the original video. When a transcript is supplied, the system prompt gains a transcript addendum (spoken content only from the transcript, cited by time range) and the prompt carries attributed segments (`[m:ss-m:ss] text`) within the analysis window, bounded by `MAX_TRANSCRIPT_CHARS`.
 
 ## 7. API contract
 

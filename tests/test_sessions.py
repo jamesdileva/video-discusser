@@ -235,3 +235,62 @@ def test_unknown_session_404(tmp_path: Path) -> None:
     resp = client.get("/api/sessions/sess_does_not_exist")
     assert resp.status_code == 404
     assert resp.json()["error"]["code"] == "session_not_found"
+
+
+def test_v1_database_migrates_to_v2(tmp_path: Path) -> None:
+    """Sprint 18: a v1 database (no transcript_used column) migrates safely,
+    preserving its rows, and old messages read as transcript_used=False."""
+    import sqlite3
+
+    sessions_dir = tmp_path / "sessions"
+    sessions_dir.mkdir()
+    db = sessions_dir / "sessions.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE sessions (
+            session_id TEXT PRIMARY KEY,
+            video_id TEXT NOT NULL,
+            video_url TEXT NOT NULL,
+            source TEXT NOT NULL,
+            title TEXT,
+            model_id TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE messages (
+            message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            snapshot_revision INTEGER NOT NULL,
+            window_start_seconds REAL NOT NULL,
+            window_end_seconds REAL NOT NULL,
+            frames_json TEXT NOT NULL DEFAULT '[]'
+        );
+        INSERT INTO sessions VALUES ('sess_v1', 'vid1', 'C:/v.mp4', 'local_file',
+            NULL, 'm', '2026-01-01T00:00:00+00:00');
+        INSERT INTO messages VALUES (1, 'sess_v1', 'question', 'old question',
+            '2026-01-01T00:00:00+00:00', 1, 0.0, 10.0, '[]');
+        """
+    )
+    conn.execute("PRAGMA user_version = 1")
+    conn.commit()
+    conn.close()
+
+    store = SessionStore(sessions_dir)  # triggers the v1 → v2 migration
+    assert store.enabled
+    detail = store.get_session("sess_v1")
+    assert detail.messages[0].content == "old question"
+    assert detail.messages[0].transcript_used is False
+
+    # The migrated store can still record new discussions (v2 column present).
+    session_id = store.record_discussion(
+        video_id="vid2", video_url="u", source="local_file", title=None,
+        model_id="m", question="new", answer="new answer", snapshot_revision=1,
+        window_start_seconds=0.0, window_end_seconds=1.0, frames=[],
+        transcript_used=True,
+    )
+    assert session_id
+    detail2 = store.get_session(session_id)
+    assert detail2.messages[-1].transcript_used is True

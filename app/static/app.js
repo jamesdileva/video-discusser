@@ -23,6 +23,7 @@
     "video-id", "video-ts", "video-updated", "video-source", "video-revision",
     "local-path-input", "local-sync-button", "local-sync-status",
     "window-select", "preview-button", "preview-stage", "preview-window",
+    "preview-transcript",
     "frames-strip", "preview-stale", "preview-warning",
     "chat-log", "chat-form", "question-input", "ask-button",
     "history-list", "history-detail", "history-clear-button", "history-status",
@@ -193,6 +194,19 @@
         " (" + preview.frames.length + " frame" + (preview.frames.length === 1 ? "" : "s") +
         ", snapshot #" + preview.snapshot_revision + ")"
     );
+    setHidden(els["preview-transcript"], false);
+    if (preview.transcript_available) {
+      setText(
+        els["preview-transcript"],
+        "Transcript available: " + preview.transcript_segment_count +
+          " segment(s) in the window — spoken content comes from the transcript."
+      );
+    } else {
+      setText(
+        els["preview-transcript"],
+        "No transcript — audio content is unknown to the model."
+      );
+    }
     if (preview.warnings && preview.warnings.length > 0) {
       setHidden(els["preview-warning"], false);
       setText(els["preview-warning"], "Warnings: " + preview.warnings.join(" | "));
@@ -364,7 +378,7 @@
     });
   }
 
-  function appendDiscusserMessage(answer, framesUsed) {
+  function appendDiscusserMessage(answer, framesUsed, meta) {
     if (chatStarted) {
       els["chat-log"].classList.remove("empty");
     }
@@ -420,11 +434,15 @@
     const labels = framesUsed.map(function (f) {
       return formatTimestamp(f.timestamp_seconds);
     });
+    const transcriptNote = meta && meta.transcript_used
+      ? "Transcript included (" + (meta.transcript_segment_count || 0) +
+        " segment(s) — spoken content comes from the transcript, cited by time range)."
+      : "Only sampled still frames were analyzed — audio and moments between frames were not seen.";
     setText(
       footer,
       "AI-generated commentary — not legal advice. Frames reviewed: " +
         (labels.length ? labels.join(", ") : "none") +
-        ". Only sampled still frames were analyzed — audio and moments between frames were not seen."
+        ". " + transcriptNote
     );
     msg.appendChild(footer);
 
@@ -485,7 +503,10 @@
       markPreviewStaleForState(
         lastKnownStatus ? lastKnownStatus.active_video : null
       );
-      appendDiscusserMessage(body.answer, body.frames_used);
+      appendDiscusserMessage(body.answer, body.frames_used, {
+        transcript_used: body.transcript_used,
+        transcript_segment_count: body.transcript_segment_count,
+      });
       loadSessions(); // the new Q/A pair is persisted — refresh the list
       if (body.revision_changed) {
         appendChatMessage(

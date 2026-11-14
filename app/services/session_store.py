@@ -26,7 +26,7 @@ from app.schemas.discussion import FrameRecord
 
 LOGGER = logging.getLogger("app.sessions")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -50,6 +50,7 @@ class SessionMessage:
     window_start_seconds: float
     window_end_seconds: float
     frames: list[FrameRecord]
+    transcript_used: bool = False
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,19 @@ class SessionStore:
             )
         if version == SCHEMA_VERSION:
             return
+        if version == 1:
+            # v1 → v2 (Sprint 18): transcript flag on every message.
+            try:
+                conn.execute(
+                    "ALTER TABLE messages ADD COLUMN transcript_used"
+                    " INTEGER NOT NULL DEFAULT 0"
+                )
+            except sqlite3.OperationalError:
+                pass  # column already present (partial migration)
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            conn.commit()
+            LOGGER.info("session store migrated to schema v%d", SCHEMA_VERSION)
+            return
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS sessions (
@@ -128,7 +142,8 @@ class SessionStore:
                 snapshot_revision INTEGER NOT NULL,
                 window_start_seconds REAL NOT NULL,
                 window_end_seconds REAL NOT NULL,
-                frames_json TEXT NOT NULL DEFAULT '[]'
+                frames_json TEXT NOT NULL DEFAULT '[]',
+                transcript_used INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
             """
@@ -153,6 +168,7 @@ class SessionStore:
         window_start_seconds: float,
         window_end_seconds: float,
         frames: list[FrameRecord],
+        transcript_used: bool = False,
     ) -> str | None:
         """Append one Q/A pair, creating the per-video session if needed.
         Returns the session id, or None when disabled/unavailable."""
@@ -182,9 +198,11 @@ class SessionStore:
                 self._conn.execute(
                     "INSERT INTO messages (session_id, role, content, created_at,"
                     " snapshot_revision, window_start_seconds, window_end_seconds,"
-                    " frames_json) VALUES (?, 'answer', ?, ?, ?, ?, ?, ?)",
+                    " frames_json, transcript_used)"
+                    " VALUES (?, 'answer', ?, ?, ?, ?, ?, ?, ?)",
                     (session_id, answer, now, snapshot_revision,
-                     window_start_seconds, window_end_seconds, frames_json),
+                     window_start_seconds, window_end_seconds, frames_json,
+                     int(transcript_used)),
                 )
             return session_id
         except (sqlite3.Error, UnicodeEncodeError) as exc:
@@ -266,7 +284,8 @@ class SessionStore:
                 raise SessionStoreError("session_not_found", "Unknown session.")
             message_rows = self._conn.execute(
                 "SELECT role, content, created_at, snapshot_revision,"
-                " window_start_seconds, window_end_seconds, frames_json"
+                " window_start_seconds, window_end_seconds, frames_json,"
+                " transcript_used"
                 " FROM messages WHERE session_id = ? ORDER BY message_id",
                 (session_id,),
             ).fetchall()
@@ -279,6 +298,7 @@ class SessionStore:
                 window_start_seconds=row[4],
                 window_end_seconds=row[5],
                 frames=[FrameRecord.model_validate(item) for item in json.loads(row[6])],
+                transcript_used=bool(row[7]) if len(row) > 7 else False,
             )
             for row in message_rows
         ]

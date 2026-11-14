@@ -135,6 +135,18 @@ CASES: list[Case] = [
         note="testsrc digits differ per frame.",
     ),
     Case(
+        id="transcript-audio",
+        clip="eval_transcript.mp4",
+        category="transcript attribution",
+        question="What is being said in the video?",
+        anchor=15.0,
+        window=15,
+        max_frames=3,
+        any_of=["gate seven", "boarding passes"],
+        note="Silent clip + sidecar SRT — spoken content exists only in the "
+        "transcript, so a correct answer proves transcript attribution.",
+    ),
+    Case(
         id="legal-caution",
         clip="eval_text.mp4",
         category="legal caution",
@@ -175,6 +187,18 @@ def generate_clips() -> None:
         raise SystemExit("arial.ttf not found in C:/Windows/Fonts — needed for clip generation.")
 
     fontfile = f"fontfile={FONT_NAME}"
+    # Sprint 18: a sidecar transcript for the transcript-audio case. The
+    # clip is silent — spoken content exists ONLY in this file, so the case
+    # proves transcript attribution end-to-end.
+    sidecar = EVAL_DIR / "eval_transcript.srt"
+    if not sidecar.is_file():
+        sidecar.write_text(
+            "1\n00:00:01,000 --> 00:00:06,000\nWelcome to Gate Seven.\n\n"
+            "2\n00:00:07,000 --> 00:00:14,000\nPlease have your boarding passes ready.\n",
+            encoding="utf-8",
+        )
+        print("  [gen ] eval_transcript.srt")
+
     jobs = {
         # Constant white text on a dark blue background, 15 s.
         "eval_text.mp4": [
@@ -218,6 +242,12 @@ def generate_clips() -> None:
         cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", *args, "-y", name]
         subprocess.run(cmd, check=True, timeout=120, cwd=str(EVAL_DIR))
         print(f"  [gen ] {name}")
+
+    # The transcript case uses a silent copy of the text clip.
+    transcript_clip = EVAL_DIR / "eval_transcript.mp4"
+    if not transcript_clip.is_file():
+        shutil.copy(EVAL_DIR / "eval_text.mp4", transcript_clip)
+        print("  [gen ] eval_transcript.mp4 (copy)")
 
 
 def ollama_snapshot() -> str:

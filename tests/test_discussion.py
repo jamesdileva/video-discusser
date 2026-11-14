@@ -247,3 +247,90 @@ def test_repeat_question_uses_cached_frames(tmp_path: Path) -> None:
     assert [f["frame_id"] for f in first.json()["frames_used"]] == [
         f["frame_id"] for f in second.json()["frames_used"]
     ]
+
+
+# --- Transcript flow (Sprint 18) ------------------------------------------------
+
+
+def test_transcript_sidecar_is_included_in_prompt_and_response(tmp_path: Path) -> None:
+    client, media_root = make_client(tmp_path)
+    (media_root / "sample.srt").write_text(
+        "1\n00:00:01,000 --> 00:00:03,500\nWelcome to Gate Seven.\n\n"
+        "2\n00:00:04,000 --> 00:00:06,000\nPlease have your boarding passes ready.\n",
+        encoding="utf-8",
+    )
+    client.post(
+        "/api/sync/local-file",
+        json={"path": str(media_root / "sample.mp4"), "timestamp_seconds": 10.0},
+    )
+    resp = client.post(
+        "/api/discuss",
+        json={"question": "What is being said?", "max_frames": 2},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["transcript_used"] is True
+    assert body["transcript_segment_count"] >= 1
+
+    app = client.app  # type: ignore[attr-defined]
+    call = app.state.inference_adapter.calls[0]
+    # The transcript-aware addendum is in the system prompt...
+    assert "A transcript is supplied with this request" in call["system_prompt"]
+    assert "The transcript is the sole source for anything spoken" in call["system_prompt"]
+    # ...and the attributed transcript block is in the user prompt.
+    assert "Transcript (sidecar subtitles):" in call["user_prompt"]
+    assert "[0:01-0:03] Welcome to Gate Seven." in call["user_prompt"]
+
+
+def test_no_sidecar_means_frames_only_workflow(tmp_path: Path) -> None:
+    client, media_root = make_client(tmp_path)
+    client.post(
+        "/api/sync/local-file",
+        json={"path": str(media_root / "sample.mp4"), "timestamp_seconds": 10.0},
+    )
+    resp = client.post("/api/discuss", json={"question": "What?", "max_frames": 2})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["transcript_used"] is False
+    assert body["transcript_segment_count"] == 0
+
+    app = client.app  # type: ignore[attr-defined]
+    call = app.state.inference_adapter.calls[0]
+    assert "A transcript is supplied with this request" not in call["system_prompt"]
+
+
+def test_opt_out_forces_frames_only(tmp_path: Path) -> None:
+    client, media_root = make_client(tmp_path)
+    (media_root / "sample.srt").write_text(
+        "1\n00:00:01,000 --> 00:00:03,500\nWelcome to Gate Seven.\n",
+        encoding="utf-8",
+    )
+    client.post(
+        "/api/sync/local-file",
+        json={"path": str(media_root / "sample.mp4"), "timestamp_seconds": 10.0},
+    )
+    resp = client.post(
+        "/api/discuss",
+        json={"question": "What?", "max_frames": 2, "include_audio_transcript": False},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["transcript_used"] is False
+    app = client.app  # type: ignore[attr-defined]
+    assert "A transcript is supplied" not in app.state.inference_adapter.calls[0]["system_prompt"]
+
+
+def test_malformed_sidecar_degrades_to_frames_only(tmp_path: Path) -> None:
+    client, media_root = make_client(tmp_path)
+    (media_root / "sample.srt").write_text("not a subtitle file\n", encoding="utf-8")
+    client.post(
+        "/api/sync/local-file",
+        json={"path": str(media_root / "sample.mp4"), "timestamp_seconds": 10.0},
+    )
+    resp = client.post(
+        "/api/discuss",
+        json={"question": "What is being said?", "max_frames": 2},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["transcript_used"] is False
+    assert any("unreadable" in w for w in body["warnings"])

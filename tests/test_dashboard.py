@@ -76,6 +76,19 @@ def test_app_js_renders_structured_answers(client: TestClient) -> None:
         assert sink not in js
 
 
+def test_app_js_distinguishes_transcript_evidence(client: TestClient) -> None:
+    """Sprint 18: the UI distinguishes transcript evidence from visual
+    evidence — the evidence card states availability, the answer footer
+    attributes spoken content to the transcript."""
+    js = client.get("/app.js").text
+    assert "transcript_available" in js
+    assert "Transcript available:" in js
+    assert "No transcript — audio content is unknown to the model." in js
+    assert "spoken content comes from the transcript" in js
+    html = client.get("/").text
+    assert 'id="preview-transcript"' in html
+
+
 def test_disclaimer_visible_in_static_html(client: TestClient) -> None:
     """The notice must be visible without opening settings."""
     html = client.get("/").text

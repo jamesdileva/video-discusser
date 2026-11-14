@@ -26,6 +26,7 @@ from app.api.deps import acquire_pipeline, get_active_video_service
 from app.api.errors import ApiError
 from app.api.frames import get_frame_store
 from app.api.sync import _media_error_status
+from app.services.transcripts import fetch_transcript_for_snapshot
 from app.config import Settings
 from app.schemas.discussion import (
     EvidencePreviewRequest,
@@ -120,6 +121,25 @@ def preview_evidence(
                 _media_error_status(exc.code), exc.code, exc.message
             ) from exc
 
+        # Transcript availability for the same window (Sprint 18): the card
+        # shows whether spoken content is knowable at all. Auto-included
+        # when available; the discuss route honors the request opt-out.
+        transcript_segments = []
+        transcript_warnings: list[str] = []
+        if payload.include_audio_transcript is not False:
+            fetched = fetch_transcript_for_snapshot(
+                source=snapshot.source,
+                video_path=resolved.path if snapshot.source == "local_file" else None,
+                url=snapshot.url if snapshot.source == "youtube" else None,
+                video_id=snapshot.video_id,
+                window_start=plan.window_start_seconds,
+                window_end=plan.window_end_seconds,
+                settings=settings,
+            )
+            if fetched is not None:
+                transcript_segments, transcript_warnings = fetched
+        transcript_count = len(transcript_segments)
+
         LOGGER.info(
             "evidence preview ready revision=%d video_id=%s frames=%d window=[%.2f, %.2f] cache_hit=%s",
             snapshot.revision,
@@ -149,7 +169,9 @@ def preview_evidence(
                 )
                 for record in batch.frames
             ],
-            warnings=batch.warnings,
+            warnings=[*batch.warnings, *transcript_warnings],
+            transcript_available=bool(transcript_segments),
+            transcript_segment_count=transcript_count,
         )
     finally:
         lock.release()

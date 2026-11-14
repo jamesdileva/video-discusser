@@ -29,6 +29,7 @@ class EvidencePreviewRequest(BaseModel):
 
     window_seconds: int | None = Field(default=None, ge=1, le=86400)
     max_frames: int | None = Field(default=None, ge=1, le=10000)
+    include_audio_transcript: bool | None = Field(default=None)
 
 
 class EvidenceWindow(BaseModel):
@@ -56,15 +57,24 @@ class EvidencePreviewResponse(BaseModel):
     window: EvidenceWindow
     frames: list[FramePreview]
     warnings: list[str]
+    transcript_available: bool = False
+    transcript_segment_count: int = 0
 
 
 class DiscussionRequest(BaseModel):
     """`POST /api/discuss`. Sanity ceilings only — the service clamps to the
-    server's configured bounds (`MAX_QUESTION_CHARS`, window, frame cap)."""
+    server's configured bounds (`MAX_QUESTION_CHARS`, window, frame cap).
+
+    `include_audio_transcript` implements the field reserved in
+    docs/architecture.md §6: transcript text (sidecar subtitles / captions —
+    local metadata, never speech-to-text) is included when available.
+    Default None = include when available; set false to force the
+    frames-only workflow."""
 
     question: str = Field(min_length=1, max_length=10000)
     window_seconds: int | None = Field(default=None, ge=1, le=86400)
     max_frames: int | None = Field(default=None, ge=1, le=10000)
+    include_audio_transcript: bool | None = Field(default=None)
 
 
 class FrameReference(BaseModel):
@@ -93,3 +103,5 @@ class DiscussionResponse(BaseModel):
     revision_changed: bool
     model_id: str
     elapsed_seconds: float
+    transcript_used: bool = False
+    transcript_segment_count: int = 0

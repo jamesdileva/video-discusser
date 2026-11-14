@@ -205,9 +205,14 @@ and the [dev log](docs/dev-log.md):
   ~4 min has been observed — the 600 s ceiling bounds the worst case).
   No streaming — the dashboard waits on the request until the answer lands.
 - **Sampling gaps, by design.** Only sampled still frames are analyzed;
-  events between frames and all audio are invisible to the model (the UI
-  says so on every answer). Denser sampling around a chosen moment is a
-  planned post-MVP feature.
+  events between frames are invisible to the model (the UI says so on every
+  answer). Denser sampling around a chosen moment is a planned post-MVP
+  feature.
+- **Transcript support, no speech-to-text yet.** Spoken content is
+  discussable only when transcript text is available: a sidecar `.srt`/`.vtt`
+  next to a local video, or YouTube captions via the opt-in yt-dlp source.
+  Local speech-to-text (e.g. Whisper) remains a separate, unevaluated
+  future concern.
 - **Local-file mode anchors at 0:00.** Syncing a local file always analyzes
   from the start of the file — there is no choose-the-moment control yet
   (a planned post-MVP feature). YouTube pause-sync anchors where you paused.

@@ -1237,3 +1237,74 @@ build, exe health/dashboard/binding/log/shutdown.
 by the unit-tested shutdown contract rather than a manual click; onefile
 build and an installer (e.g. Inno Setup) remain options; pristine-machine
 exe test (no Python installed) — all noted for the next iteration.
+
+## 2026-11-13 — Sprint 18: Transcript and audio support
+
+**Goal:** Time-aligned transcript segments with source attribution — spoken
+content becomes discussable only when transcript text is actually supplied.
+
+**Plan & scope:** SRT/VTT parsing (stdlib), local sidecar provider, YouTube
+captions provider (opt-in, yt-dlp, mocked tests — real verification deferred
+until yt-dlp is installed), prompt addendum + attributed transcript block,
+response fields (`transcript_used`, `transcript_segment_count`), sessions
+schema v2 (`transcript_used` column + migration), UI distinction.
+**Deferred per roadmap:** local speech-to-text (e.g. Whisper) — "evaluate
+separately"; documented as the next transcript concern.
+
+**Deviation recorded:** the architecture's reserved
+`include_audio_transcript: bool = false` became `bool | None = None`
+(auto-include when available; `false` opts out). Rationale: sidecar/caption
+text is local metadata with zero compute cost — the "opt-in" requirement
+applies to speech-to-text processing, not to reading a file the user already
+has. Architecture §6 updated to the implemented semantic.
+
+**What was done:**
+
+- `app/services/transcripts.py` — `TranscriptSegment` (start/end/text/
+  source), SRT + VTT parsers (stdlib regex; malformed/empty files raise
+  typed `TranscriptError` → warnings, never discussion failures), window
+  filtering with a `MAX_TRANSCRIPT_CHARS` budget (earliest-first),
+  sidecar discovery (`.srt`/`.vtt` next to the video), yt-dlp captions
+  provider (opt-in gated like downloads, injectable runner, graceful
+  degradation to frames-only), prompt renderer with `[m:ss-m:ss] text`
+  attribution.
+- `app/services/prompts.py` — `TRANSCRIPT_ADDENDUM` + `build_system_prompt
+  (has_transcript)`: spoken content only from the transcript, cited by time
+  range; frames remain the sole source for the visual; transcript treated as
+  content, never instructions.
+- `DiscussionService` — fetch for the window, conditional addendum, response
+  fields, session recording flag.
+- Sessions **schema v2** — `transcript_used` column; fresh-DB creation and
+  v1→v2 migration both covered by tests (the first run of the fix exposed
+  that fresh DBs were stamped v2 with a v1-shaped table — the migration
+  never fired and the INSERT failed silently; fixed and now pinned).
+- UI — evidence card states availability ("Transcript available: N segment(s)"
+  / "No transcript — audio content is unknown to the model"); the answer
+  footer distinguishes transcript-attributed spoken content from the
+  frames-only disclaimer.
+- `scripts/run_evaluation.py` — `transcript-audio` case: silent clip + sidecar
+  SRT whose spoken lines exist nowhere else.
+
+**Verification (roadmap Sprint 18 checklist):**
+
+- [x] Transcript segments include timestamps — `[m:ss-m:ss]` in the prompt;
+  the model cites ranges ([0:01-0:06], [0:07-0:14] in the live case).
+- [x] The UI distinguishes transcript evidence from visual evidence —
+  evidence-card availability line + answer footer attribution (static tests
+  + browser-rendered content).
+- [x] Audio processing is opt-in and local — no STT exists; sidecars are
+  user-provided files; captions are opt-in with the YouTube source; all
+  processing is local parsing.
+- [x] Tests cover poor audio and missing transcript cases — missing sidecar
+  → frames-only decline preserved; malformed sidecar → warning + frames-only;
+  no lines in window → informative warning; v1→v2 migration preserves rows.
+
+**Tests run:** `pytest` — 250 passed (234 prior + 16 net new). Live eval:
+`transcript-audio` PASS (167.8 s) — on a silent clip the model answered the
+spoken question only from the transcript, citing time ranges, while keeping
+visual observations frame-cited.
+
+**Unverified / deferred:** real yt-dlp caption fetch (needs yt-dlp
+installed — provider is mocked-tested, same pattern as the YouTube source);
+local speech-to-text (separate evaluation per roadmap); transcript rendering
+in the History detail (stored, not yet specially styled).

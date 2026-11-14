@@ -87,6 +87,14 @@ class Settings(BaseSettings):
     max_frame_dimension: int = Field(default=768, ge=128, le=2048)
     jpeg_quality: int = Field(default=80, ge=1, le=100)
 
+    # --- Transcripts (Sprint 18) --------------------------------------------
+    # Sidecar subtitles / captions are local text metadata — not audio
+    # processing. Local speech-to-text remains a separate future evaluation.
+    transcripts_enabled: bool = True
+    # Character budget for transcript text fed to the model per request
+    # (earliest-first, bounded resources).
+    max_transcript_chars: int = Field(default=12000, ge=0, le=200000)
+
     # --- Input bounds ------------------------------------------------------
     max_question_chars: int = Field(default=2000, ge=1, le=10000)
 
