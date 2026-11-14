@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     # Character budget for transcript text fed to the model per request
     # (earliest-first, bounded resources).
     max_transcript_chars: int = Field(default=12000, ge=0, le=200000)
+    # Sprint 19: narrow symmetric window for focused re-sampling around a
+    # chosen moment (denser frames; the frame cap still bounds the count).
+    focus_window_seconds: int = Field(default=30, ge=5, le=3600)
 
     # --- Input bounds ------------------------------------------------------
     max_question_chars: int = Field(default=2000, ge=1, le=10000)

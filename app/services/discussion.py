@@ -29,7 +29,11 @@ from app.services.frame_extraction import (
     FrameStore,
     extract_frames,
 )
-from app.services.frame_sampling import clamp_max_frames, plan_frame_timestamps
+from app.services.frame_sampling import (
+    clamp_max_frames,
+    plan_centered_timestamps,
+    plan_frame_timestamps,
+)
 from app.services.inference import InferenceError, OllamaInferenceAdapter
 from app.services.prompts import build_system_prompt, build_user_prompt
 from app.services.transcripts import (
@@ -68,6 +72,8 @@ class DiscussionResult:
     cache_key: str = ""
     transcript_used: bool = False
     transcript_segment_count: int = 0
+    focus_seconds: float | None = None
+    focus_window_seconds: int | None = None
 
 
 class DiscussionService:
@@ -95,6 +101,8 @@ class DiscussionService:
         window_seconds: int | None = None,
         max_frames: int | None = None,
         include_transcript: bool = True,
+        focus_seconds: float | None = None,
+        focus_window_seconds: int | None = None,
     ) -> DiscussionResult:
         started = time.perf_counter()
         snapshot = self._active.snapshot()
@@ -128,12 +136,27 @@ class DiscussionService:
 
         try:
             resolved = self._media_sources.resolve(media_request)
-            plan = plan_frame_timestamps(
-                anchor_seconds=snapshot.timestamp_seconds,
-                window_seconds=window,
-                max_frames=frames_cap,
-                duration_seconds=resolved.duration_seconds,
-            )
+            # Sprint 19: a focused moment re-anchors sampling — a symmetric,
+            # denser window around it, instead of the pause-anchored backward
+            # window. The frame cap still bounds the count.
+            if focus_seconds is not None:
+                focus_window = min(
+                    focus_window_seconds or self._settings.focus_window_seconds,
+                    self._settings.analysis_window_seconds,
+                )
+                plan = plan_centered_timestamps(
+                    moment_seconds=focus_seconds,
+                    window_seconds=focus_window,
+                    max_frames=frames_cap,
+                    duration_seconds=resolved.duration_seconds,
+                )
+            else:
+                plan = plan_frame_timestamps(
+                    anchor_seconds=snapshot.timestamp_seconds,
+                    window_seconds=window,
+                    max_frames=frames_cap,
+                    duration_seconds=resolved.duration_seconds,
+                )
             stage_resolve_ms = (time.perf_counter() - started) * 1000
             LOGGER.info(
                 "stage=resolve elapsed_ms=%.0f video_id=%s source=%s",
@@ -272,6 +295,8 @@ class DiscussionService:
             cache_key=batch.cache_key,
             transcript_used=bool(transcript_segments),
             transcript_segment_count=len(transcript_segments),
+            focus_seconds=focus_seconds,
+            focus_window_seconds=(focus_window if focus_seconds is not None else None),
         )
 
     def _frame_path(self, record: FrameRecord) -> Path:

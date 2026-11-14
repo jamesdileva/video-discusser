@@ -206,8 +206,9 @@ and the [dev log](docs/dev-log.md):
   No streaming — the dashboard waits on the request until the answer lands.
 - **Sampling gaps, by design.** Only sampled still frames are analyzed;
   events between frames are invisible to the model (the UI says so on every
-  answer). Denser sampling around a chosen moment is a planned post-MVP
-  feature.
+  answer). Focused re-sampling (Sprint 19) lets you re-center dense sampling
+  on a chosen moment — measured in the [evaluation report](docs/evaluation-report.md)
+  (the same sign sparse sampling missed is found when focused).
 - **Transcript support, no speech-to-text yet.** Spoken content is
   discussable only when transcript text is available: a sidecar `.srt`/`.vtt`
   next to a local video, or YouTube captions via the opt-in yt-dlp source.

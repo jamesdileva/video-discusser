@@ -57,6 +57,9 @@ class Case:
     # Any one of these substrings (case-insensitive) marks the case PASS.
     any_of: list[str] | None
     note: str
+    # Sprint 19: focused re-sampling (moment + narrow window).
+    focus_seconds: float | None = None
+    focus_window_seconds: float | None = None
 
 
 CASES: list[Case] = [
@@ -133,6 +136,21 @@ CASES: list[Case] = [
         max_frames=4,
         any_of=["chang"],
         note="testsrc digits differ per frame.",
+    ),
+    Case(
+        id="event-focused",
+        clip="eval_event.mp4",
+        category="focused re-sampling accuracy",
+        question="Does a yellow sign with text appear? What does it say?",
+        anchor=8.5,
+        window=2,
+        max_frames=3,
+        any_of=["alert 42"],
+        focus_seconds=8.5,
+        focus_window_seconds=2.0,
+        note="Sprint 19 measurement: the SAME sign the sparse event-missed case "
+        "cannot see is found when sampling is focused on its moment. Requires "
+        "focus_seconds=8.5 (focus_window=2) — passed via --focus.",
     ),
     Case(
         id="transcript-audio",
@@ -317,6 +335,8 @@ def run_case(case: Case, service: DiscussionService, active: ActiveVideoService)
             question=case.question,
             window_seconds=case.window,
             max_frames=case.max_frames,
+            focus_seconds=case.focus_seconds,
+            focus_window_seconds=case.focus_window_seconds,
         )
         record.update(
             {

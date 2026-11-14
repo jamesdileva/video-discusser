@@ -1308,3 +1308,52 @@ visual observations frame-cited.
 installed — provider is mocked-tested, same pattern as the YouTube source);
 local speech-to-text (separate evaluation per roadmap); transcript rendering
 in the History detail (stored, not yet specially styled).
+
+## 2026-11-13 — Sprint 19 (pulled forward, post-RC): Better temporal reasoning
+
+**Goal:** Denser sampling around a chosen moment, without raising the global
+frame budget.
+
+**Plan & scope:** `plan_centered_timestamps` (symmetric window, clamped,
+moment never droppable), `focus_seconds`/`focus_window_seconds` on discuss +
+preview, `FOCUS_WINDOW_SECONDS` knob, UI focus input with labeled window,
+and the roadmap's accuracy measurement via an `event-focused` eval case.
+Deviation: Sprint 19 pulled ahead of the remaining numbered order after the
+user requested temporal re-sampling post-RC (recorded per AGENTS.md).
+
+**What was done:**
+
+- `app/services/frame_sampling.py` — `plan_centered_timestamps`: symmetric
+  `[moment - w/2, moment + w/2]` window clamped to `[0, duration - guard]`;
+  the exact (unrounded) moment always joins the plan — the audit C1 lesson
+  applied to the new planner; spread uses `max_frames - 1` points so the
+  merged total stays within the cap (first draft exceeded it by one — caught
+  by the verification assert before any test ran).
+- Request/response fields on discuss + preview (`focus_seconds`,
+  `focus_window_seconds`); the service branches to the centered planner when
+  focus is set; transcript windows follow the focused window.
+- UI — "Focus at (s)" input; the window line labels focused plans
+  ("focused at 0:08"); both preview and discuss carry the focus.
+- `scripts/run_evaluation.py` — `event-focused` case (focus_seconds=8.5,
+  window 2 s, 3 frames) against the same eval_event clip as `event-missed`.
+
+**Verification (roadmap Sprint 19 checklist):**
+
+- [x] The user can request a focused interval — request field + UI input;
+  preview and discuss both honor it.
+- [x] Sampling budget remains bounded — merged plan ≤ `max_frames`
+  (asserted; the moment always included).
+- [x] Old and new frame sets are clearly distinguished — the response echoes
+  focus fields; the window line labels "focused at m:ss"; snapshot revisions
+  continue to tag every result.
+- [x] Evaluation measures whether denser sampling improves accuracy — the
+  `event-missed`/`event-focused` pair: **missed → found** at equal frame
+  count by re-centering alone (recorded in the evaluation report).
+
+**Tests run:** `pytest` — 250 passed. Live eval: `event-focused` PASS
+(67.1 s).
+
+**Unverified / deferred:** UI re-preview flow (focused preview → discuss
+uses the same focus — wired, not separately browser-verified); denser
+sampling quality on real footage; transcript window follows focus (wired,
+no dedicated test).

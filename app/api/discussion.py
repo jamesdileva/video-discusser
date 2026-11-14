@@ -71,6 +71,8 @@ def post_discuss(
                 window_seconds=payload.window_seconds,
                 max_frames=payload.max_frames,
                 include_transcript=payload.include_audio_transcript is not False,
+                focus_seconds=payload.focus_seconds,
+                focus_window_seconds=payload.focus_window_seconds,
             )
         except DiscussionError as exc:
             raise ApiError(_error_status(exc.code), exc.code, exc.message) from exc
@@ -102,4 +104,6 @@ def post_discuss(
         elapsed_seconds=result.elapsed_seconds,
         transcript_used=result.transcript_used,
         transcript_segment_count=result.transcript_segment_count,
+        focus_seconds=result.focus_seconds,
+        focus_window_seconds=result.focus_window_seconds,
     )

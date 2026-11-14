@@ -73,6 +73,8 @@
           <option value="60">Last 60 s</option>
           <option value="180" selected>Last 3 min</option>
         </select>
+        <label for="focus-input" title="Re-center sampling on this moment instead of the pause">Focus at (s)</label>
+        <input id="focus-input" type="number" min="0" step="0.1" placeholder="optional">
         <button id="preview-button" type="button" disabled>Preview frames</button>
       </div>
       <p id="preview-stage" class="meta" role="status">

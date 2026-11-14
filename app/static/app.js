@@ -22,7 +22,7 @@
     "video-empty", "video-details",
     "video-id", "video-ts", "video-updated", "video-source", "video-revision",
     "local-path-input", "local-sync-button", "local-sync-status",
-    "window-select", "preview-button", "preview-stage", "preview-window",
+    "window-select", "focus-input", "preview-button", "preview-stage", "preview-window",
     "preview-transcript",
     "frames-strip", "preview-stale", "preview-warning",
     "chat-log", "chat-form", "question-input", "ask-button",
@@ -152,6 +152,13 @@
     els["preview-stage"].classList.toggle("preview-error", Boolean(isError));
   }
 
+  function readFocusSeconds() {
+    const raw = els["focus-input"] ? els["focus-input"].value.trim() : "";
+    if (!raw) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  }
+
   function renderFrames(preview) {
     const strip = els["frames-strip"];
     if (!strip) return;
@@ -185,9 +192,12 @@
       strip.appendChild(figure);
     });
     setHidden(els["preview-window"], false);
+    const focusLabel = preview.focus_seconds != null
+      ? "Analysis window (focused at " + formatTimestamp(preview.focus_seconds) + "): "
+      : "Analysis window: ";
     setText(
       els["preview-window"],
-      "Analysis window: " +
+      focusLabel +
         formatTimestamp(preview.window.start_seconds) +
         " → " +
         formatTimestamp(preview.window.end_seconds) +
@@ -243,10 +253,15 @@
     setHidden(els["preview-stale"], true);
     setPreviewStage("Resolving source and extracting frames…", false);
     try {
+      const focus = readFocusSeconds();
+      const previewPayload = { window_seconds: Number(els["window-select"].value) };
+      if (focus != null) {
+        previewPayload.focus_seconds = focus;
+      }
       const resp = await fetch("/api/evidence/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ window_seconds: Number(els["window-select"].value) }),
+        body: JSON.stringify(previewPayload),
       });
       const body = await resp.json();
       if (!resp.ok) {
@@ -467,16 +482,21 @@
     setChatInFlight(true);
     appendChatMessage("system", "System", "Gathering frames and asking the local model…");
     try {
+      const focus = readFocusSeconds();
+      const discussPayload = {
+        question: question,
+        window_seconds: Number(els["window-select"].value),
+        // Live-conversation profile: fewer frames keeps answers responsive
+        // on the target GPU (12-frame requests measured >180 s in Sprint 10).
+        max_frames: 6,
+      };
+      if (focus != null) {
+        discussPayload.focus_seconds = focus;
+      }
       const resp = await fetch("/api/discuss", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          question: question,
-          window_seconds: Number(els["window-select"].value),
-          // Live-conversation profile: fewer frames keeps answers responsive
-          // on the target GPU (12-frame requests measured >180 s in Sprint 10).
-          max_frames: 6,
-        }),
+        body: JSON.stringify(discussPayload),
       });
       const body = await resp.json();
       if (!resp.ok) {

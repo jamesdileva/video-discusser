@@ -30,6 +30,12 @@ class EvidencePreviewRequest(BaseModel):
     window_seconds: int | None = Field(default=None, ge=1, le=86400)
     max_frames: int | None = Field(default=None, ge=1, le=10000)
     include_audio_transcript: bool | None = Field(default=None)
+    focus_seconds: float | None = Field(default=None, ge=0, le=86400, allow_inf_nan=False)
+    focus_window_seconds: int | None = Field(default=None, ge=5, le=3600)
+    # Sprint 19: when set, the analysis window is re-centered on this moment
+    # (symmetric, denser — the frame cap still bounds the count).
+    focus_seconds: float | None = Field(default=None, ge=0, le=86400, allow_inf_nan=False)
+    focus_window_seconds: int | None = Field(default=None, ge=5, le=3600)
 
 
 class EvidenceWindow(BaseModel):
@@ -59,6 +65,8 @@ class EvidencePreviewResponse(BaseModel):
     warnings: list[str]
     transcript_available: bool = False
     transcript_segment_count: int = 0
+    focus_seconds: float | None = None
+    focus_window_seconds: int | None = None
 
 
 class DiscussionRequest(BaseModel):
@@ -75,6 +83,12 @@ class DiscussionRequest(BaseModel):
     window_seconds: int | None = Field(default=None, ge=1, le=86400)
     max_frames: int | None = Field(default=None, ge=1, le=10000)
     include_audio_transcript: bool | None = Field(default=None)
+    focus_seconds: float | None = Field(default=None, ge=0, le=86400, allow_inf_nan=False)
+    focus_window_seconds: int | None = Field(default=None, ge=5, le=3600)
+    # Sprint 19: when set, the analysis window is re-centered on this moment
+    # (symmetric, denser — the frame cap still bounds the count).
+    focus_seconds: float | None = Field(default=None, ge=0, le=86400, allow_inf_nan=False)
+    focus_window_seconds: int | None = Field(default=None, ge=5, le=3600)
 
 
 class FrameReference(BaseModel):

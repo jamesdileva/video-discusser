@@ -8,34 +8,33 @@
     "max_frame_dimension": 768,
     "jpeg_quality": 80
   },
-  "ran_at": "2026-11-13 17:45:40",
+  "ran_at": "2026-11-13 20:10:06",
   "results": [
     {
-      "id": "transcript-audio",
-      "category": "transcript attribution",
-      "question": "What is being said in the video?",
-      "clip": "eval_transcript.mp4",
+      "id": "event-focused",
+      "category": "focused re-sampling accuracy",
+      "question": "Does a yellow sign with text appear? What does it say?",
+      "clip": "eval_event.mp4",
       "max_frames": 3,
-      "window_seconds": 15,
-      "note": "Silent clip + sidecar SRT \u2014 spoken content exists only in the transcript, so a correct answer proves transcript attribution.",
-      "answer": "Visible observations:\nThe supplied frames are static images featuring a dark blue background with the white text \"GATE 7\" centered on the screen [0:00], [0:07], and [0:14]. There are no other objects, people, or movement visible in these title cards.\n\nPossible interpretation:\nThe visual content serves as a graphical identifier for an airport gate announcement. The spoken content aligns with this text, specifically \"Welcome to Gate Seven\" [0:01-0:06] which appears shortly after the first frame timestamp [0:00]. A second spoken instruction follows in the later frames corresponding to 0:07 and 0:14, stating \"Please have your boarding passes ready\" [0:07-0:14], which matches the visual text duration.\n\nWhat cannot be established from these frames:\nThese are static title cards; therefore, they do not show the speaker or a physical environment beyond the blue background. The transcript confirms the audio content, but the frames themselves provide no visual evidence of sound or speech, nor do they show the airport concourse or passengers mentioned in the spoken instructions.",
+      "window_seconds": 2,
+      "note": "Sprint 19 measurement: the SAME sign the sparse event-missed case cannot see is found when sampling is focused on its moment. Requires focus_seconds=8.5 (focus_window=2) \u2014 passed via --focus.",
+      "answer": "Visible observations:\nIn the frame at 0:07, there is no visible content other than a solid gray background. In the frame at 0:08, a rectangular yellow shape containing black text appears centered on the screen. The text reads \"ALERT 42\".\n\nPossible interpretation:\nThe appearance of this specific formatted text suggests it is functioning as an alert, warning, or notification system component within the video feed.\n\nWhat cannot be established from these frames:\nWhether the yellow element is a physical sign in a real environment or a digital graphic overlay; the context of the location; or any associated audio or action taking place simultaneously.",
       "frames_used": [
-        0.0,
-        7.475,
-        14.7
+        7.5,
+        8.5
       ],
       "window": [
-        0.0,
-        14.95
+        7.5,
+        9.5
       ],
-      "elapsed_seconds": 167.8,
+      "elapsed_seconds": 67.1,
       "model_id": "qwen3.5:4b",
       "snapshot_revision": 1,
       "revision_changed": false,
       "memory": "qwen3.5:4b    96f38c742e0a    2.7 GB    25%/75% CPU/GPU    8192       llamacpp    4 minutes from now",
       "error": null,
       "verdict": "PASS",
-      "matched": "gate seven"
+      "matched": "alert 42"
     }
   ]
 }

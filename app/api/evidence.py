@@ -36,7 +36,11 @@ from app.schemas.discussion import (
 )
 from app.services.active_video import ActiveVideoService
 from app.services.frame_extraction import FrameExtractionError, FrameStore, extract_frames
-from app.services.frame_sampling import clamp_max_frames, plan_frame_timestamps
+from app.services.frame_sampling import (
+    clamp_max_frames,
+    plan_centered_timestamps,
+    plan_frame_timestamps,
+)
 
 LOGGER = logging.getLogger("app.evidence")
 
@@ -88,12 +92,24 @@ def preview_evidence(
         registry = request.app.state.media_sources
         try:
             resolved = registry.resolve(media_request)
-            plan = plan_frame_timestamps(
-                anchor_seconds=snapshot.timestamp_seconds,
-                window_seconds=window_seconds,
-                max_frames=max_frames,
-                duration_seconds=resolved.duration_seconds,
-            )
+            if payload.focus_seconds is not None:
+                focus_window = min(
+                    payload.focus_window_seconds or settings.focus_window_seconds,
+                    settings.analysis_window_seconds,
+                )
+                plan = plan_centered_timestamps(
+                    moment_seconds=payload.focus_seconds,
+                    window_seconds=focus_window,
+                    max_frames=max_frames,
+                    duration_seconds=resolved.duration_seconds,
+                )
+            else:
+                plan = plan_frame_timestamps(
+                    anchor_seconds=snapshot.timestamp_seconds,
+                    window_seconds=window_seconds,
+                    max_frames=max_frames,
+                    duration_seconds=resolved.duration_seconds,
+                )
             try:
                 batch = extract_frames(
                     resolved,
@@ -172,6 +188,10 @@ def preview_evidence(
             warnings=[*batch.warnings, *transcript_warnings],
             transcript_available=bool(transcript_segments),
             transcript_segment_count=transcript_count,
+            focus_seconds=payload.focus_seconds,
+            focus_window_seconds=(
+                payload.focus_window_seconds if payload.focus_seconds is not None else None
+            ),
         )
     finally:
         lock.release()

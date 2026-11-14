@@ -239,6 +239,8 @@ Never send arbitrary local paths to the browser. The API should expose an applic
 - `window_seconds: int | None` (defaults to configured window)
 - `max_frames: int | None` (clamped to configured maximum)
 - `include_audio_transcript: bool | None` (Sprint 18: transcript text — sidecar subtitles or captions, local metadata only — is included when available; `false` forces the frames-only workflow. Local speech-to-text is a separate, unevaluated future concern.)
+- `focus_seconds: float | None` (Sprint 19: when set, sampling is re-centered on this moment — a symmetric, denser window of `focus_window_seconds` around it, clamped to the video; the frame cap still bounds the count. `None` keeps the pause-anchored backward window.)
+- `focus_window_seconds: int | None` (narrow window half-width basis for the focused plan; default from `FOCUS_WINDOW_SECONDS`)
 
 ### DiscussionResponse
 
@@ -252,7 +254,7 @@ Never send arbitrary local paths to the browser. The API should expose an applic
 - `request_id: str`
 - `transcript_used: bool`, `transcript_segment_count: int` (Sprint 18: whether attributed transcript segments were supplied with the prompt)
 
-The response should make the evidence window inspectable and allow the UI to link each cited timestamp to the original video. When a transcript is supplied, the system prompt gains a transcript addendum (spoken content only from the transcript, cited by time range) and the prompt carries attributed segments (`[m:ss-m:ss] text`) within the analysis window, bounded by `MAX_TRANSCRIPT_CHARS`.
+The response should make the evidence window inspectable and allow the UI to link each cited timestamp to the original video. When a transcript is supplied, the system prompt gains a transcript addendum (spoken content only from the transcript, cited by time range) and the prompt carries attributed segments (`[m:ss-m:ss] text`) within the analysis window, bounded by `MAX_TRANSCRIPT_CHARS`. Focused requests echo `focus_seconds`/`focus_window_seconds` so old (pause-anchored) and new (moment-centered) frame sets are clearly distinguishable in the UI and history.
 
 ## 7. API contract
 

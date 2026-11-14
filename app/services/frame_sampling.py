@@ -93,3 +93,54 @@ def plan_frame_timestamps(
         window_end_seconds=end,
         timestamps=timestamps,
     )
+
+
+def plan_centered_timestamps(
+    *,
+    moment_seconds: float,
+    window_seconds: float,
+    max_frames: int,
+    duration_seconds: float | None = None,
+) -> SamplingPlan:
+    """Denser re-sampling around a chosen moment (roadmap Sprint 19).
+
+    A symmetric window centered on `moment_seconds`, clamped to
+    `[0, duration - EOF_GUARD]`. The chosen moment is always included in the
+    plan (audit C1's lesson applies doubly here: the moment is the one input
+    the user explicitly designated, so it can never be rounded or filtered
+    away), timestamps are monotonic, and the count stays within `max_frames`.
+    Unlike the backward pause window, the moment may sit mid-plan.
+    """
+    if moment_seconds < 0:
+        raise ValueError("moment_seconds must be non-negative")
+    if window_seconds <= 0:
+        raise ValueError("window_seconds must be positive")
+    if max_frames < 1:
+        raise ValueError("max_frames must be at least 1")
+
+    moment = moment_seconds
+    if duration_seconds is not None:
+        moment = min(moment, max(0.0, duration_seconds - EOF_GUARD_SECONDS))
+
+    half = window_seconds / 2
+    start = max(0.0, moment - half)
+    end = moment + half
+    if duration_seconds is not None:
+        end = min(end, max(0.0, duration_seconds - EOF_GUARD_SECONDS))
+
+    if max_frames == 1 or end - start <= 1e-9:
+        timestamps = [moment]
+    else:
+        step = (end - start) / (max_frames - 1)
+        spread = [round(start + step * i, 3) for i in range(max_frames - 1)]
+        # The exact moment joins the (rounded) spread; it can never be
+        # dropped by the window filter because the clamps above keep it
+        # inside [start, end]. Merged total stays within max_frames.
+        timestamps = sorted({*spread, round(moment, 3), moment})
+        timestamps = [t for t in timestamps if start <= t <= end]
+
+    return SamplingPlan(
+        window_start_seconds=start,
+        window_end_seconds=end,
+        timestamps=timestamps,
+    )
