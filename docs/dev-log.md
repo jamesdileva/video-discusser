@@ -1516,3 +1516,42 @@ auto-syncs; SPA navigation re-sync verified).
 **Unverified / deferred:** caption fetch on a video that actually HAS
 captions (this one had none — STT would fill exactly that gap); real-site
 allowlist hosts beyond YouTube.
+
+
+## 2026-11-16 — STT feasibility spike (Whisper on this machine)
+
+**Goal:** Determine whether local speech-to-text fills the "no transcript —
+audio unknown" gap on this hardware, before any integration work.
+
+**Runtime chosen:** whisper.cpp nightly `b5454` Windows CPU x64 build (8 MB)
+— the ggml-org family already proven on this machine via Ollama. No official
+Vulkan Windows build ships; CPU measured faster than realtime by a wide
+margin, so a custom Vulkan build is unnecessary for this profile. CUDA
+variants are irrelevant on AMD. Models: `ggml-tiny.en.bin` (78 MB) and
+`ggml-base.en.bin` (148 MB) — English-only; untracked under `downloads/`.
+
+**Measurements:**
+
+- TTS fixture (4.95 s, deterministic text): tiny.en **0.8 s**, base.en
+  **1.1 s**; near-verbatim transcription ("Gate 7" vs "Gate Seven").
+- Real audio ("Me at the zoo", 19 s, 2005 webcam mic): base.en **1.6 s**
+  (~12× realtime); near-accurate ("fums" for "trunks" — imperfect on noisy
+  audio, exactly why the prompt addendum discloses STT uncertainty).
+- Memory: base.en peak working set **302.5 MB** (transient).
+- Accuracy check used a deterministic TTS fixture (PowerShell
+  System.Speech) so ground truth is controlled, plus real webcam audio for
+  noise realism.
+
+**Verdict: GO** — local STT is feasible, fast, bounded. Integration shape
+proposed in `docs/stt-feasibility.md`: `whisper-cli` subprocess under the
+FFmpeg discipline, ffmpeg audio extraction (16 kHz mono), trigger ONLY on
+the no-transcript path AND opt-in, segments attributed `local
+speech-to-text` (distinct trust tier from captions/sidecars), ≈0.1× audio
+duration added latency. Binaries and models: separate downloads, never
+bundled (model-weights rule).
+
+**Files:** `scripts/measure_whisper_memory.ps1`,
+`docs/stt-feasibility.md`; `.gitignore` gains `downloads/`.
+
+**Deferred to the integration sprint:** request-level opt-in flag, prompt
+addendum wording, eval cases (TTS fixture + real audio), UI attribution.
