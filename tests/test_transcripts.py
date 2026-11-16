@@ -137,8 +137,11 @@ def test_format_block_attributions_and_ranges() -> None:
     assert "[1:01-1:03] hello" in block
 
 
-def test_youtube_provider_requires_ytdlp(tmp_path: Path) -> None:
+def test_youtube_provider_requires_ytdlp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Without yt-dlp the provider degrades gracefully (None + warning)."""
+    monkeypatch.setattr(
+        "app.services.transcripts.find_ytdlp", lambda: None
+    )
     from app.config import Settings
     from app.services.transcripts import fetch_youtube_transcript
 
@@ -167,10 +170,8 @@ def test_youtube_provider_relabels_captions(tmp_path: Path, monkeypatch: pytest.
     settings = Settings(
         youtube_source_enabled=True, cache_dir=tmp_path / "cache", _env_file=None  # type: ignore[call-arg]
     )
-    real_which = shutil.which
     monkeypatch.setattr(
-        "app.services.transcripts.shutil.which",
-        lambda name, **kwargs: "C:/fake/yt-dlp.exe" if name == "yt-dlp" else real_which(name, **kwargs),
+        "app.services.transcripts.find_ytdlp", lambda: "C:/fake/yt-dlp.exe"
     )
 
     def fake_run(args, *, timeout_seconds, tool):  # type: ignore[no-untyped-def]

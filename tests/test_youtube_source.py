@@ -84,7 +84,9 @@ def test_unsupported_url_rejected_before_external_tools(tmp_path: Path) -> None:
 
 
 def test_missing_ytdlp_is_actionable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("app.adapters.youtube_source.shutil.which", lambda name: None)
+    # yt-dlp is genuinely installed in this venv now, so patch the adapter's
+    # discovery seam to simulate its absence.
+    monkeypatch.setattr("app.adapters.youtube_source.find_ytdlp", lambda: None)
     source = YouTubeSource(make_settings(tmp_path), run=RecordingRunner())
     with pytest.raises(MediaSourceError) as excinfo:
         source.resolve(MediaRequest(source_type="youtube", url=VALID_URL))
