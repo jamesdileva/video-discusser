@@ -36,6 +36,12 @@ data/**
 models/
 llama*/
 
+# --- Local tool downloads (whisper.cpp build, models) ---
+downloads/
+
+# --- Foreign tool artifacts (another project polluted this workspace once) ---
+runs/
+
 # --- Logs ---
 *.log
 logs/
