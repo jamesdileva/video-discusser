@@ -391,6 +391,7 @@ A video change during processing is *reported* (`revision_changed: true`, result
 
 ### Session history
 
+- `POST /api/sync/url` → unified URL sync (Sprint 21): YouTube hosts take the strict YouTube flow; other http(s) hosts sync as `direct_url` and are downloaded at discussion time, bounded by `MAX_DOWNLOAD_BYTES`. The URL is shape-validated only; platform access is the operator's responsibility and no DRM circumvention is attempted.
 - `GET /api/sessions[?q=term]` → `{"enabled": bool, "query": str, "sessions": [{session_id, video_id, source, title, model_id, created_at, last_activity_at, message_count}]}` — `q` searches message content, title, and video ID (case-insensitive substring, wildcards escaped).
 - `GET /api/sessions/{session_id}/export` → Markdown attachment (Sprint 20): profile at export time, per-message windows and snapshot revisions, evidence timeline with timestamps (YouTube links for youtube sources), warnings, and the AI-commentary disclaimer. **No raw video and no local file paths are included.**
 - `GET /api/sessions/{session_id}` → `{"session": {...}, "messages": [{role, content, created_at, snapshot_revision, window: [start, end], frames: [{frame_id, timestamp_seconds, preview_url}]}]}` — stored absolute paths are never echoed; frame references are opaque IDs plus cache-relative paths.

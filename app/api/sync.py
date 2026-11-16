@@ -13,13 +13,16 @@ from __future__ import annotations
 import hashlib
 import logging
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Request
 
 from app.adapters.media_source import MediaRequest, MediaSourceError
 from app.api.deps import get_active_video_service
 from app.api.errors import ApiError
+from app.adapters.direct_source import DirectUrlSource
 from app.schemas.sync import (
+    DirectUrlSyncPayload,
     LocalFileSyncPayload,
     SyncAcceptedResponse,
     SyncPayload,
@@ -96,6 +99,57 @@ def post_sync_local_file(
         state.revision,
         state.video_id,
         state.timestamp_seconds,
+    )
+    return SyncAcceptedResponse(revision=state.revision, active_video=state)
+
+
+@router.post("/api/sync/url", response_model=SyncAcceptedResponse)
+async def post_sync_url(
+    payload: DirectUrlSyncPayload,
+    request: Request,
+    service: ActiveVideoService = Depends(get_active_video_service),
+) -> SyncAcceptedResponse:
+    """Unified URL sync: YouTube hosts take the strict YouTube flow (URL
+    recorded, no download); any other http(s) host syncs as `direct_url`
+    (downloaded and probed at discussion time, size-capped). The URL is
+    validated by shape here; platform access is the operator's own
+    responsibility and no DRM circumvention is attempted."""
+    parts = urlparse(payload.url)
+    host = (parts.hostname or "").lower().rstrip(".")
+
+    if host in {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}:
+        try:
+            parsed = parse_youtube_url(payload.url)
+        except YouTubeUrlError as exc:
+            raise ApiError(status_code=422, code=exc.code, message=exc.message) from exc
+        state = service.apply_sync(
+            url=payload.url,
+            timestamp_seconds=payload.timestamp_seconds,
+            video_id=parsed.video_id,
+            sync_source="manual",
+            source="youtube",
+        )
+        video_id = state.video_id
+    else:
+        # Direct media URL: shape-validated (schema), downloaded at discuss
+        # time by DirectUrlSource. Nothing heavy happens at sync time.
+        video_id = "url_" + hashlib.sha256(payload.url.encode("utf-8")).hexdigest()[:12]
+        state = service.apply_sync(
+            url=payload.url,
+            timestamp_seconds=payload.timestamp_seconds,
+            video_id=video_id,
+            sync_source="manual",
+            source="direct_url",
+            title=parts.hostname,
+        )
+        video_id = state.video_id
+
+    LOGGER.info(
+        "url sync accepted revision=%d video_id=%s timestamp=%.2f host=%s",
+        state.revision,
+        state.video_id,
+        state.timestamp_seconds,
+        host,
     )
     return SyncAcceptedResponse(revision=state.revision, active_video=state)
 

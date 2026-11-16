@@ -43,7 +43,7 @@ class ActiveVideoService:
         the revision, so an out-of-order (stale) sync can never silently
         overwrite newer state — the revision always moves forward and the
         change is observable."""
-        if source not in ("youtube", "local_file"):
+        if source not in ("youtube", "local_file", "direct_url"):
             raise ValueError(f"unsupported video source: {source!r}")
         with self._lock:
             next_revision = (self._state.revision + 1) if self._state else 1

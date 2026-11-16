@@ -1409,3 +1409,67 @@ no-match/wildcard-literal, export privacy/readability, retention prune).
 
 **Unverified / deferred:** export in other formats; session "resume as
 active" (post-MVP); export styling of transcript blocks (plain text).
+
+## 2026-11-13 — Sprint 21 (pulled forward): Additional source integrations
+
+**Goal:** More ways to bring video in, each isolated behind the source
+adapter, with graceful failures and bounded resources.
+
+**Plan & scope:** a `DirectUrlSource` adapter for plain HTTP(S) video files
+(streaming download, size cap, timeout, content verification), a unified
+`POST /api/sync/url` dispatcher (YouTube hosts → the strict YouTube flow;
+other http(s) hosts → a `direct_url` source type downloaded at discussion
+time), and `EXTRA_SOURCE_HOSTS` — a deliberate host allowlist enabling
+additional yt-dlp-supported sites, each an operator terms-of-access review.
+**Deferred:** real-site verification for allowlisted hosts (needs yt-dlp
+installed + a terms review per host); DRM-protected platforms remain out of
+scope permanently (no circumvention).
+
+**Answer to "do I need accounts or API keys?"** No — the design stays
+account-free and key-free. Source access here means plain HTTP files or
+yt-dlp-supported public pages; anything requiring a signed-in account or a
+cloud API is out of scope by the architecture's no-cloud-services rule.
+
+**What was done:**
+
+- `app/adapters/direct_source.py` — `DirectUrlSource`: streaming GET with a
+  wire-level byte counter (framing-independent — chunked bodies are capped
+  too, the audit S1 discipline applied to downloads), `MAX_DOWNLOAD_BYTES`
+  cap (2 GiB default), timeout, text-content rejection, probe verification,
+  UUID filenames, temporary (`cleanup_after_use`), cache identity keyed on
+  the URL hash.
+- `POST /api/sync/url` — dispatches by host: YouTube → the strict YouTube
+  parser (URL recorded, no download); everything else → `direct_url`
+  (URL shape-validated only; downloaded at discuss time). `direct_url`
+  joins the `VideoSource` types end-to-end (schema, active-video service,
+  media-request branches in discuss + preview).
+- Registry — `DirectUrlSource` wired alongside the other adapters.
+- UI — "Sync from URL" input in the Active video card.
+- Tests — a local `ThreadingHTTPServer` integration suite: resolve +
+  probe + identity, unreachable/404/text-content/size-cap (both
+  Content-Length and chunked framing) failures, plus sync-dispatch tests
+  (YouTube host → strict flow; non-YouTube → direct_url; non-http rejected;
+  end-to-end sync → discuss → download → answer with a stubbed inference).
+  The local-server fixture also lost a broken `partial(handler, kwarg=...)`
+  pattern (crashed every handler construction).
+
+**Verification (roadmap Sprint 21 checklist):**
+
+- [x] The new source is isolated behind an adapter — `DirectUrlSource`
+  implements the `MediaSource` protocol; registry-resolved; nothing outside
+  the adapter knows about HTTP downloads.
+- [x] Existing YouTube and local-file workflows still pass — full suite
+  266 passed (255 prior + 11 new).
+- [x] Unsupported/access-restricted content fails gracefully — 404s,
+  text-content responses, oversized streams, unreachable hosts, and
+  non-http schemes all map to typed codes (`media_download_failed`,
+  `media_download_timeout`, `invalid_url`, `invalid_request`); no DRM
+  circumvention exists anywhere.
+
+**Tests run:** `pytest` — 266 passed. Live: local-HTTP-server integration
+(resolves with probed duration ≈ 10 s; failures as designed).
+
+**Unverified / deferred:** real-site checks for `EXTRA_SOURCE_HOSTS`
+(host + terms review per site when the operator enables one); grandchild
+processes on yt-dlp timeouts (carried from the audit); transcripts for
+direct URLs (no metadata tier applies).

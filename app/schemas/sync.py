@@ -19,7 +19,7 @@ MAX_URL_CHARS = 2048
 VIDEO_ID_PATTERN = r"^[A-Za-z0-9_-]{11}$"
 
 SyncSource = Literal["pause_event", "manual"]
-VideoSource = Literal["youtube", "local_file"]
+VideoSource = Literal["youtube", "local_file", "direct_url"]
 
 
 class SyncPayload(BaseModel):
@@ -61,6 +61,30 @@ class SyncAcceptedResponse(BaseModel):
 
     revision: int
     active_video: ActiveVideoState
+
+
+class DirectUrlSyncPayload(BaseModel):
+    """`POST /api/sync/url` — a direct video URL chosen by the local user.
+    YouTube hosts dispatch to the strict YouTube flow; other http(s) hosts
+    sync as `direct_url` (downloaded at discussion time, size-capped)."""
+
+    url: str = Field(min_length=1, max_length=2048)
+    timestamp_seconds: float = Field(default=0.0, ge=0, allow_inf_nan=False)
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url_shape(cls, value: str) -> str:
+        from urllib.parse import urlparse
+
+        value = value.strip()
+        if not value:
+            raise ValueError("url must not be blank")
+        parts = urlparse(value)
+        if parts.scheme not in ("http", "https"):
+            raise ValueError("Only http(s) URLs are supported.")
+        if not (parts.hostname or "").strip():
+            raise ValueError("URL has no hostname.")
+        return value
 
 
 class LocalFileSyncPayload(BaseModel):

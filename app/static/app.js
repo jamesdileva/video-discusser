@@ -22,6 +22,7 @@
     "video-empty", "video-details",
     "video-id", "video-ts", "video-updated", "video-source", "video-revision",
     "local-path-input", "local-sync-button", "local-sync-status",
+    "url-input", "url-sync-button", "url-sync-status",
     "window-select", "focus-input", "preview-button", "preview-stage", "preview-window",
     "preview-transcript",
     "frames-strip", "preview-stale", "preview-warning",
@@ -754,6 +755,41 @@
     }
   }
 
+  let urlSyncInFlight = false;
+
+  async function syncFromUrl() {
+    if (urlSyncInFlight) return;
+    const url = els["url-input"] ? els["url-input"].value.trim() : "";
+    if (!url) {
+      setText(els["url-sync-status"], "Enter a video URL first.");
+      return;
+    }
+    urlSyncInFlight = true;
+    setText(els["url-sync-status"], "Syncing…");
+    try {
+      const resp = await fetch("/api/sync/url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ url: url }),
+      });
+      const body = await resp.json();
+      if (!resp.ok) {
+        const code = body && body.error ? body.error.code : "HTTP " + resp.status;
+        const message = body && body.error ? body.error.message : "";
+        setText(els["url-sync-status"], "Failed — " + code + ". " + message);
+        return;
+      }
+      setText(
+        els["url-sync-status"],
+        "Synced as " + body.active_video.video_id + " (revision #" + body.revision + ")"
+      );
+    } catch (err) {
+      setText(els["url-sync-status"], "Failed — backend unreachable.");
+    } finally {
+      urlSyncInFlight = false;
+    }
+  }
+
   function init() {
     if (els["chat-form"]) els["chat-form"].addEventListener("submit", onChatSubmit);
     if (els["preview-button"]) {
@@ -773,6 +809,17 @@
       });
     }
     document.addEventListener("visibilitychange", onVisibilityChange);
+    if (els["url-sync-button"]) {
+      els["url-sync-button"].addEventListener("click", function () {
+        syncFromUrl();
+      });
+      els["url-input"].addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          syncFromUrl();
+        }
+      });
+    }
     if (els["history-clear-button"]) {
       els["history-clear-button"].addEventListener("click", clearAllSessions);
     }

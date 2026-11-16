@@ -135,6 +135,7 @@ establish something.
 | `local_path_not_allowed` when syncing a file | Add its folder to `LOCAL_MEDIA_DIRS` in `.env`, restart backend |
 | Port already in use on launch | Another instance is running — use it, or change `APP_PORT` |
 | YouTube sync pill says *rejected* | Check the backend log; the pill shows the stable error code |
+| Direct URL fails with `media_download_failed` | The URL must serve video content directly; text pages and 404s fail by design |
 
 ### 9. Desktop app (packaging)
 

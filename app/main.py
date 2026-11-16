@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app import __version__
+from app.adapters.direct_source import DirectUrlSource
 from app.adapters.local_file_source import LocalFileSource
 from app.adapters.media_source import MediaSourceRegistry
 from app.adapters.youtube_source import YouTubeSource
@@ -159,7 +160,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_error_handlers(app)
     app.state.active_video = ActiveVideoService()
     app.state.media_sources = MediaSourceRegistry(
-        [LocalFileSource(settings), YouTubeSource(settings)]
+        [LocalFileSource(settings), YouTubeSource(settings), DirectUrlSource(settings)]
     )
     app.state.frame_store = frame_store
     app.state.settings = settings

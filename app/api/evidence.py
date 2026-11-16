@@ -71,6 +71,8 @@ def preview_evidence(
         media_request = MediaRequest(
             source_type="youtube", url=snapshot.url, video_id=snapshot.video_id
         )
+    elif snapshot.source == "direct_url":
+        media_request = MediaRequest(source_type="direct_url", url=snapshot.url)
     else:
         media_request = MediaRequest(
             source_type="local_file", local_path=Path(snapshot.url)

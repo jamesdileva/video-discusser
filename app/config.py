@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     # comply with platform terms and applicable law (no DRM circumvention).
     youtube_source_enabled: bool = False
     media_download_timeout_seconds: int = Field(default=600, ge=5, le=3600)
+    # Sprint 21: additional yt-dlp-supported sites, deliberately enabled by
+    # hostname. Each added host is the operator's own terms-of-access review.
+    extra_source_hosts: list[str] = Field(default_factory=list)
+    # Hard cap for direct-URL downloads (streaming count, framing-independent).
+    max_download_bytes: int = Field(default=2147483648, ge=65536, le=107374182400)
 
     # --- Frame & window budgets (server clamps requests to these) -------
     analysis_window_seconds: int = Field(default=180, ge=5, le=3600)
