@@ -111,6 +111,9 @@ class Settings(BaseSettings):
     # Raw video is never stored; frames remain in the bounded cache.
     sessions_enabled: bool = True
     sessions_dir: Path = Path("./data/sessions")
+    # Sessions whose last activity is older than this many days are pruned at
+    # startup. 0 = keep forever (deletion stays manual).
+    sessions_retention_days: int = Field(default=0, ge=0, le=3650)
 
     @field_validator("local_media_dirs", mode="before")
     @classmethod

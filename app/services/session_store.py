@@ -18,15 +18,15 @@ import json
 import logging
 import sqlite3
 import threading
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.schemas.discussion import FrameRecord
 
 LOGGER = logging.getLogger("app.sessions")
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -51,6 +51,7 @@ class SessionMessage:
     window_end_seconds: float
     frames: list[FrameRecord]
     transcript_used: bool = False
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -71,13 +72,17 @@ def _now_iso() -> str:
 
 
 class SessionStore:
-    def __init__(self, sessions_dir: Path, *, enabled: bool = True) -> None:
+    def __init__(
+        self, sessions_dir: Path, *, enabled: bool = True, retention_days: int = 0
+    ) -> None:
         self._enabled = enabled
+        self._retention_days = retention_days
         self._db_path = Path(sessions_dir) / "sessions.db"
         self._lock = threading.Lock()
         self._conn: sqlite3.Connection | None = None
         if self._enabled:
             self._connect()
+            self.prune_expired(self._retention_days)
 
     @property
     def enabled(self) -> bool:
@@ -117,6 +122,19 @@ class SessionStore:
                 )
             except sqlite3.OperationalError:
                 pass  # column already present (partial migration)
+            version = 2
+            conn.execute(f"PRAGMA user_version = {version}")
+            conn.commit()
+            LOGGER.info("session store migrated to schema v%d", version)
+        if version == 2:
+            # v2 → v3 (Sprint 20): per-message warnings for reproducible exports.
+            try:
+                conn.execute(
+                    "ALTER TABLE messages ADD COLUMN warnings_json"
+                    " TEXT NOT NULL DEFAULT '[]'"
+                )
+            except sqlite3.OperationalError:
+                pass  # column already present (partial migration)
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             conn.commit()
             LOGGER.info("session store migrated to schema v%d", SCHEMA_VERSION)
@@ -143,7 +161,8 @@ class SessionStore:
                 window_start_seconds REAL NOT NULL,
                 window_end_seconds REAL NOT NULL,
                 frames_json TEXT NOT NULL DEFAULT '[]',
-                transcript_used INTEGER NOT NULL DEFAULT 0
+                transcript_used INTEGER NOT NULL DEFAULT 0,
+                warnings_json TEXT NOT NULL DEFAULT '[]'
             );
             CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
             """
@@ -169,6 +188,7 @@ class SessionStore:
         window_end_seconds: float,
         frames: list[FrameRecord],
         transcript_used: bool = False,
+        warnings: list[str] | None = None,
     ) -> str | None:
         """Append one Q/A pair, creating the per-video session if needed.
         Returns the session id, or None when disabled/unavailable."""
@@ -178,6 +198,7 @@ class SessionStore:
         frames_json = json.dumps(
             [frame.model_dump() for frame in frames]
         )
+        warnings_json = json.dumps(warnings or [])
         try:
             with self._lock, self._conn:
                 session_id = self._get_or_create_session(
@@ -198,11 +219,11 @@ class SessionStore:
                 self._conn.execute(
                     "INSERT INTO messages (session_id, role, content, created_at,"
                     " snapshot_revision, window_start_seconds, window_end_seconds,"
-                    " frames_json, transcript_used)"
-                    " VALUES (?, 'answer', ?, ?, ?, ?, ?, ?, ?)",
+                    " frames_json, transcript_used, warnings_json)"
+                    " VALUES (?, 'answer', ?, ?, ?, ?, ?, ?, ?, ?)",
                     (session_id, answer, now, snapshot_revision,
                      window_start_seconds, window_end_seconds, frames_json,
-                     int(transcript_used)),
+                     int(transcript_used), warnings_json),
                 )
             return session_id
         except (sqlite3.Error, UnicodeEncodeError) as exc:
@@ -285,7 +306,7 @@ class SessionStore:
             message_rows = self._conn.execute(
                 "SELECT role, content, created_at, snapshot_revision,"
                 " window_start_seconds, window_end_seconds, frames_json,"
-                " transcript_used"
+                " transcript_used, warnings_json"
                 " FROM messages WHERE session_id = ? ORDER BY message_id",
                 (session_id,),
             ).fetchall()
@@ -299,6 +320,7 @@ class SessionStore:
                 window_end_seconds=row[5],
                 frames=[FrameRecord.model_validate(item) for item in json.loads(row[6])],
                 transcript_used=bool(row[7]) if len(row) > 7 else False,
+                warnings=json.loads(row[8]) if len(row) > 8 else [],
             )
             for row in message_rows
         ]
@@ -315,6 +337,93 @@ class SessionStore:
             ),
             messages=messages,
         )
+
+    def search_sessions(self, query: str) -> list[SessionSummary]:
+        """Sessions whose title, video ID, or any message content matches the
+        query (case-insensitive substring; %/_ escaped). Empty query returns
+        everything, newest first."""
+        if not self._enabled or self._conn is None:
+            return []
+        needle = query.strip()
+        if not needle:
+            return self.list_sessions()
+        # Escape LIKE wildcards, then the ESCAPE character itself (audit-safe
+        # string building: raw strings, no ambiguous escapes).
+        escaped = (
+            needle.replace("\\", r"\\").replace("%", r"\%").replace("_", r"\_")
+        )
+        pattern = f"%{escaped}%"
+        try:
+            with self._lock:
+                rows = self._conn.execute(
+                    """
+                    SELECT s.session_id, s.video_id, s.source, s.title, s.model_id,
+                           s.created_at, COUNT(m.message_id),
+                           COALESCE(MAX(m.created_at), s.created_at)
+                    FROM sessions s
+                    LEFT JOIN messages m ON m.session_id = s.session_id
+                    WHERE s.title LIKE ? ESCAPE ?
+                       OR s.video_id LIKE ? ESCAPE ?
+                       OR EXISTS (SELECT 1 FROM messages mm
+                                  WHERE mm.session_id = s.session_id
+                                    AND mm.content LIKE ? ESCAPE ?)
+                    GROUP BY s.session_id
+                    ORDER BY COALESCE(MAX(m.created_at), s.created_at) DESC
+                    """,
+                    (pattern, "\\", pattern, "\\", pattern, "\\"),
+                ).fetchall()
+        except sqlite3.Error as exc:
+            LOGGER.error("failed to search sessions: %s", exc)
+            return []
+        return [
+            SessionSummary(
+                session_id=row[0],
+                video_id=row[1],
+                source=row[2],
+                title=row[3],
+                model_id=row[4],
+                created_at=row[5],
+                message_count=row[6],
+                last_activity_at=row[7],
+            )
+            for row in rows
+        ]
+
+    def prune_expired(self, retention_days: int) -> int:
+        """Delete sessions whose last activity is older than the retention
+        window (Sprint 20 retention control). 0 disables. Returns sessions
+        removed; called at startup so retention is predictable."""
+        if retention_days <= 0:
+            return 0
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=retention_days)
+        ).isoformat()
+        if not self._enabled or self._conn is None:
+            return 0
+        try:
+            with self._lock, self._conn:
+                cursor = self._conn.execute(
+                    """
+                    DELETE FROM sessions WHERE session_id IN (
+                        SELECT s.session_id FROM sessions s
+                        LEFT JOIN messages m ON m.session_id = s.session_id
+                        GROUP BY s.session_id
+                        HAVING COALESCE(MAX(m.created_at), s.created_at) < ?
+                    )
+                    """,
+                    (cutoff,),
+                )
+            self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            if cursor.rowcount:
+                LOGGER.info(
+                    "retention pruned %d session(s) older than %d days",
+                    cursor.rowcount,
+                    retention_days,
+                )
+            return cursor.rowcount
+        except sqlite3.Error as exc:
+            LOGGER.error("retention prune failed: %s", exc)
+            return 0
 
     def frame_ids_in_session(self, session_id: str) -> list[str]:
         if not self._enabled or self._conn is None:

@@ -1357,3 +1357,55 @@ user requested temporal re-sampling post-RC (recorded per AGENTS.md).
 uses the same focus — wired, not separately browser-verified); denser
 sampling quality on real footage; transcript window follows focus (wired,
 no dedicated test).
+
+## 2026-11-16 — Sprint 20: Session library and export
+
+**Goal:** Searchable local sessions, exportable notes, and retention
+controls (roadmap Sprint 20).
+
+**Plan & scope:** server-side search (message content + title + video ID,
+wildcards escaped), self-contained Markdown export route, startup retention
+prune (`SESSIONS_RETENTION_DAYS`, 0 = keep forever), History UI wiring
+(search input, per-session Export button). Deferred: JSON/PDF export
+formats, timeline rendering beyond the existing frame strip, export of the
+transcript block styling (exported as plain text).
+
+**What was done:**
+
+- `app/services/session_store.py` — `search_sessions` (LIKE with a
+  parameterized ESCAPE character — this SQLite build rejects the embedded
+  `ESCAPE '\'` literal; parameters avoid the dialect issue entirely — and
+  `%`/`_` escaped so user queries are literal); `prune_expired(retention_
+  days)` with a truncating checkpoint, run at construction.
+- `app/services/export.py` — `build_session_export`: app version, export
+  timestamp, session/video identity (YouTube URL included — it is needed to
+  reach cited timestamps; local files identified by `video_id` + title
+  **only**, absolute paths never exported), model/runtime + profile *at
+  export time* (labeled as such; per-session `model_id` is historical),
+  per-message windows/snapshot revisions, evidence timeline (YouTube
+  timestamp links), transcript note, warnings (new `warnings_json` column —
+  **sessions schema v3** with a chained v1→v2→v3 migration), and the
+  AI-commentary disclaimer.
+- `app/api/sessions.py` — `?q=` on list; `GET /api/sessions/{id}/export`
+  (Markdown attachment, `no-store`).
+- `app/config.py` — `SESSIONS_RETENTION_DAYS` (default 0).
+- Dashboard — search input (debounced), per-session Export link; auto-
+  refresh keeps the active filter.
+
+**Verification (roadmap Sprint 20 checklist):**
+
+- [x] Export is readable and reproducible — route test asserts the profile,
+  windows, evidence timeline, snapshot revisions, and disclaimer all appear;
+  Markdown renders as plain text.
+- [x] Delete and retention controls work — delete (Sprint 15) unchanged;
+  retention prune removes expired sessions at startup, disabled at 0
+  (tested with backdated rows).
+- [x] Export does not embed raw video or local paths — no drive letters, no
+  directories, no video file contents; the bare filename as title is the
+  only file-derived text (the location is the sensitive part).
+
+**Tests run:** `pytest` — 255 passed (250 prior + 5 new: search match/
+no-match/wildcard-literal, export privacy/readability, retention prune).
+
+**Unverified / deferred:** export in other formats; session "resume as
+active" (post-MVP); export styling of transcript blocks (plain text).

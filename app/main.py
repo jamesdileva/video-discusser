@@ -110,7 +110,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging()
     frame_store = FrameStore(settings.cache_dir)
     inference_adapter = OllamaInferenceAdapter(settings)
-    session_store = SessionStore(settings.sessions_dir, enabled=settings.sessions_enabled)
+    session_store = SessionStore(
+        settings.sessions_dir,
+        enabled=settings.sessions_enabled,
+        retention_days=settings.sessions_retention_days,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):

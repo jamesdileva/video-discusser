@@ -11,9 +11,11 @@ import logging
 import threading
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import Response
 
 from app.api.deps import acquire_pipeline
 from app.api.errors import ApiError
+from app.config import Settings
 from app.services.session_store import SessionStore, SessionStoreError
 
 LOGGER = logging.getLogger("app.sessions")
@@ -41,9 +43,14 @@ def _map_store_error(exc: SessionStoreError) -> ApiError:
 
 
 @router.get("/api/sessions")
-def list_sessions(store: SessionStore = Depends(get_session_store)) -> dict:
+def list_sessions(
+    q: str = "",
+    store: SessionStore = Depends(get_session_store),
+) -> dict:
+    sessions = store.search_sessions(q) if q else store.list_sessions()
     return {
         "enabled": store.enabled,
+        "query": q,
         "sessions": [
             {
                 "session_id": s.session_id,
@@ -55,9 +62,51 @@ def list_sessions(store: SessionStore = Depends(get_session_store)) -> dict:
                 "last_activity_at": s.last_activity_at,
                 "message_count": s.message_count,
             }
-            for s in store.list_sessions()
+            for s in sessions
         ],
     }
+
+
+@router.get("/api/sessions/{session_id}/export")
+def export_session(
+    session_id: str,
+    request: Request,
+    store: SessionStore = Depends(get_session_store),
+) -> Response:
+    """Self-contained Markdown export (roadmap Sprint 20): profile, windows,
+    evidence timeline with timestamps, warnings, and the AI-commentary
+    disclaimer. No raw video and no local file paths are included."""
+    try:
+        detail = store.get_session(session_id)
+    except SessionStoreError as exc:
+        raise _map_store_error(exc) from exc
+    settings: Settings = request.app.state.settings
+    from app.services.export import ExportProfile, build_session_export
+    from datetime import datetime, timezone
+
+    profile = ExportProfile(
+        runtime=settings.inference_base_url,
+        model=settings.inference_model,
+        num_ctx=settings.inference_num_ctx,
+        max_frames=settings.max_frames_per_request,
+        max_frame_dimension=settings.max_frame_dimension,
+        jpeg_quality=settings.jpeg_quality,
+        thinking=settings.inference_think_enabled,
+    )
+    markdown = build_session_export(
+        detail,
+        profile,
+        exported_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    )
+    filename = f"video-discusser-{session_id}.md"
+    return Response(
+        content=markdown,
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get("/api/sessions/{session_id}")

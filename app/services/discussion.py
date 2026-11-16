@@ -263,6 +263,7 @@ class DiscussionService:
                 window_end_seconds=plan.window_end_seconds,
                 frames=list(batch.frames),
                 transcript_used=bool(transcript_segments),
+                warnings=[*batch.warnings, *transcript_warnings],
             )
 
         elapsed = time.perf_counter() - started

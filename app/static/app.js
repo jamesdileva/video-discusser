@@ -27,6 +27,7 @@
     "frames-strip", "preview-stale", "preview-warning",
     "chat-log", "chat-form", "question-input", "ask-button",
     "history-list", "history-detail", "history-clear-button", "history-status",
+    "history-search",
   ].forEach(function (id) {
     els[id] = document.getElementById(id);
   });
@@ -527,7 +528,7 @@
         transcript_used: body.transcript_used,
         transcript_segment_count: body.transcript_segment_count,
       });
-      loadSessions(); // the new Q/A pair is persisted — refresh the list
+      loadSessions(els["history-search"] ? els["history-search"].value.trim() : ""); // refresh with active filter
       if (body.revision_changed) {
         appendChatMessage(
           "system",
@@ -596,16 +597,26 @@
     return isNaN(date) ? iso : date.toLocaleString([], { hour12: false });
   }
 
-  async function loadSessions() {
+  let searchDebounce = null;
+
+  async function loadSessions(query) {
     if (!els["history-list"]) return;
     try {
-      const resp = await fetch("/api/sessions", { headers: { Accept: "application/json" } });
+      const url = "/api/sessions" + (query ? "?q=" + encodeURIComponent(query) : "");
+      const resp = await fetch(url, { headers: { Accept: "application/json" } });
       if (!resp.ok) return;
       const body = await resp.json();
       renderSessionList(body);
     } catch (err) {
       /* history is non-critical; leave the previous view */
     }
+  }
+
+  function onSearchInput() {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(function () {
+      loadSessions(els["history-search"].value.trim());
+    }, 300);
   }
 
   function renderSessionList(body) {
@@ -653,7 +664,14 @@
       del.addEventListener("click", function () {
         deleteSession(session.session_id);
       });
+      const exportLink = document.createElement("a");
+      exportLink.className = "history-export";
+      exportLink.href = "/api/sessions/" + encodeURIComponent(session.session_id) + "/export";
+      exportLink.download = "";
+      setText(exportLink, "Export");
+      exportLink.title = "Download this discussion as Markdown";
       row.appendChild(main);
+      row.appendChild(exportLink);
       row.appendChild(del);
       list.appendChild(row);
     });
@@ -757,6 +775,9 @@
     document.addEventListener("visibilitychange", onVisibilityChange);
     if (els["history-clear-button"]) {
       els["history-clear-button"].addEventListener("click", clearAllSessions);
+    }
+    if (els["history-search"]) {
+      els["history-search"].addEventListener("input", onSearchInput);
     }
     loadSessions();
     loadVersionOnce();

@@ -391,7 +391,8 @@ A video change during processing is *reported* (`revision_changed: true`, result
 
 ### Session history
 
-- `GET /api/sessions` → `{"enabled": bool, "sessions": [{session_id, video_id, source, title, model_id, created_at, last_activity_at, message_count}]}`
+- `GET /api/sessions[?q=term]` → `{"enabled": bool, "query": str, "sessions": [{session_id, video_id, source, title, model_id, created_at, last_activity_at, message_count}]}` — `q` searches message content, title, and video ID (case-insensitive substring, wildcards escaped).
+- `GET /api/sessions/{session_id}/export` → Markdown attachment (Sprint 20): profile at export time, per-message windows and snapshot revisions, evidence timeline with timestamps (YouTube links for youtube sources), warnings, and the AI-commentary disclaimer. **No raw video and no local file paths are included.**
 - `GET /api/sessions/{session_id}` → `{"session": {...}, "messages": [{role, content, created_at, snapshot_revision, window: [start, end], frames: [{frame_id, timestamp_seconds, preview_url}]}]}` — stored absolute paths are never echoed; frame references are opaque IDs plus cache-relative paths.
 - `DELETE /api/sessions/{session_id}` → `{"deleted": id, "frames_removed": n}` — removes the session and the cached frames no longer referenced by any other session.
 - `DELETE /api/sessions` → `{"cleared_sessions": n, "frames_removed": m}` — clears all history and all cached frames.

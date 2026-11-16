@@ -294,3 +294,114 @@ def test_v1_database_migrates_to_v2(tmp_path: Path) -> None:
     assert session_id
     detail2 = store.get_session(session_id)
     assert detail2.messages[-1].transcript_used is True
+
+
+# --- Search, export, retention (Sprint 20) ---------------------------------------
+
+
+def test_search_matches_content_and_title(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    sync_sample(client)
+    client.post("/api/discuss", json={"question": "What does the SECRET CODE show?", "max_frames": 2})
+
+    hit = client.get("/api/sessions", params={"q": "secret code"}).json()
+    assert len(hit["sessions"]) == 1  # case-insensitive match on question text
+
+    by_id = client.get("/api/sessions", params={"q": "local_"}).json()
+    assert len(by_id["sessions"]) == 1  # video_id match
+
+    miss = client.get("/api/sessions", params={"q": "zebra-unicorn"}).json()
+    assert miss["sessions"] == []
+
+
+def test_search_wildcards_are_literal(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    sync_sample(client)
+    client.post("/api/discuss", json={"question": "plain question?", "max_frames": 2})
+    # '%' as a query is a literal percent, not a wildcard match-all.
+    resp = client.get("/api/sessions", params={"q": "%"}).json()
+    assert resp["sessions"] == []
+
+
+def test_export_route_is_readable_and_private(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    app = client.app  # type: ignore[attr-defined]
+    settings: Settings = app.state.settings
+    sync_sample(client)
+    discuss = client.post(
+        "/api/discuss",
+        json={"question": "What is being said?", "max_frames": 2},
+    )
+    assert discuss.status_code == 200
+    session_id = client.get("/api/sessions").json()["sessions"][0]["session_id"]
+
+    resp = client.get(f"/api/sessions/{session_id}/export")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/markdown")
+    assert "attachment" in resp.headers["content-disposition"]
+    text = resp.text
+
+    # Readable + reproducible: profile, windows, frames, disclaimer.
+    assert "AI-generated commentary — not legal advice" in text
+    assert settings.inference_model in text
+    assert "num_ctx" in text
+    assert "Evidence timeline" in text
+    assert "Snapshot #" in text
+    assert "window 0:00" in text
+    # Privacy: no absolute local paths (the video_url is stored but never
+    # exported). The bare filename as title is fine — the directory, drive,
+    # and username are the sensitive part (audit D-M4/S4).
+    assert "C:" not in text
+    assert str(settings.local_media_dirs[0]) not in text
+    assert "videos" not in text.lower() or "videos" in str(settings.local_media_dirs[0])
+
+
+def test_export_unknown_session_404(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    resp = client.get("/api/sessions/sess_missing/export")
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "session_not_found"
+
+
+def test_retention_prunes_expired_sessions(tmp_path: Path) -> None:
+    """Sprint 20 retention control: sessions older than the retention window
+    are pruned at startup; recent sessions survive; 0 disables."""
+    import sqlite3
+    from datetime import datetime, timedelta, timezone
+
+    sessions_dir = tmp_path / "sessions"
+    store = SessionStore(sessions_dir, retention_days=0)
+    store.record_discussion(
+        video_id="vid1", video_url="u", source="local_file", title=None,
+        model_id="m", question="q", answer="a", snapshot_revision=1,
+        window_start_seconds=0.0, window_end_seconds=1.0, frames=[],
+    )
+    assert len(store.list_sessions()) == 1
+
+    # Backdate every timestamp beyond a 30-day retention window.
+    old = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    conn = sqlite3.connect(sessions_dir / "sessions.db")
+    conn.execute("UPDATE sessions SET created_at = ?", (old,))
+    conn.execute("UPDATE messages SET created_at = ?", (old,))
+    conn.commit()
+    conn.close()
+
+    # Startup prune (retention configured at construction).
+    restarted = SessionStore(sessions_dir, retention_days=30)
+    assert restarted.list_sessions() == []
+
+    # Retention disabled (0) never prunes.
+    store2 = SessionStore(sessions_dir, retention_days=0)
+    store2.record_discussion(
+        video_id="vid2", video_url="u", source="local_file", title=None,
+        model_id="m", question="q2", answer="a2", snapshot_revision=1,
+        window_start_seconds=0.0, window_end_seconds=1.0, frames=[],
+    )
+    backdated = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    conn = sqlite3.connect(sessions_dir / "sessions.db")
+    conn.execute("UPDATE sessions SET created_at = ?", (backdated,))
+    conn.execute("UPDATE messages SET created_at = ?", (backdated,))
+    conn.commit()
+    conn.close()
+    surviving = SessionStore(sessions_dir, retention_days=0)
+    assert len(surviving.list_sessions()) == 1  # 0 = keep forever
