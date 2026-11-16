@@ -70,6 +70,10 @@ def test_dev_route_serves_test_clip(client: TestClient) -> None:
 def test_harness_page_served(client: TestClient) -> None:
     resp = client.get("/dev-harness.html")
     assert resp.status_code == 200
-    # Stubs must load before the userscript.
-    assert resp.text.index("GM_xmlhttpRequest") < resp.text.index("/dev/youtube-sync.user.js")
+    # The harness JS (GM stubs + logic, externalized for the CSP) is
+    # referenced before the userscript loads.
+    assert resp.text.index("/dev-harness.js") < resp.text.index("/dev/youtube-sync.user.js")
+    js = client.get("/dev-harness.js").text
+    assert "GM_xmlhttpRequest" in js
+    assert "__vdTestHref" in js
     assert "/dev/test-clip.mp4" in resp.text
