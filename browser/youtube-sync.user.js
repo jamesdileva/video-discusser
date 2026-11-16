@@ -300,8 +300,16 @@
 
     function isSyncTarget(element) {
       // Only the main player video (or, outside YouTube, the only video).
+      // Firefox Tampermonkey sandboxes can wrap event.target and
+      // querySelector results in different wrappers around the SAME node —
+      // `===` then fails for the real main video (seen in the RC checklist:
+      // pause fired but auto-sync silently ignored it while Sync now
+      // worked). isSameNode compares the nodes the wrappers reference, so
+      // it is wrapper-safe by DOM spec.
       const main = document.querySelector("video.html5-main-video");
-      if (main) return element === main;
+      if (main) {
+        return element === main || element.isSameNode(main);
+      }
       return true;
     }
 
@@ -349,8 +357,16 @@
       "pause",
       function (event) {
         const target = event.target;
-        if (target && target.tagName === "VIDEO" && isSyncTarget(target)) {
-          attemptSync("pause_event");
+        if (target && target.tagName === "VIDEO") {
+          // Field-diagnostic only: console.debug is filtered out of the
+          // console by default, so this stays invisible in normal use.
+          console.debug(
+            "[Video Discusser] pause captured — isMain:",
+            isSyncTarget(target)
+          );
+          if (isSyncTarget(target)) {
+            attemptSync("pause_event");
+          }
         }
       },
       true
