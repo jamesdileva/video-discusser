@@ -36,6 +36,7 @@
 
 (function () {
   "use strict";
+  /* eslint-disable no-undef */ // 'module' in the Node-export guard is sandbox-guarded
 
   /**
    * Pure, DOM-free sync logic. Exported for the Node smoke tests in
