@@ -1473,3 +1473,46 @@ cloud API is out of scope by the architecture's no-cloud-services rule.
 (host + terms review per site when the operator enables one); grandchild
 processes on yt-dlp timeouts (carried from the audit); transcripts for
 direct URLs (no metadata tier applies).
+
+## 2026-11-16 — Follow-up: yt-dlp installed — first real YouTube end-to-end discussion
+
+**Goal:** Close the deferred real-YouTube verifications (RC checklist +
+Sprint 18 captions) by installing yt-dlp into the project venv.
+
+**Changes:**
+
+- `app/adapters/subprocess_utils.py` — new `find_ytdlp()`: PATH first, then
+  the active interpreter's environment (a venv-installed yt-dlp.exe is not
+  on the system PATH). Used by the YouTube source adapter and the captions
+  provider.
+- `scripts/check_environment.py` — yt-dlp detection now venv-aware.
+- `.env` (local, uncommitted) — `YOUTUBE_SOURCE_ENABLED=true` (the user's
+  explicit opt-in) and the file created from the template (it did not exist
+  before — the app had been running on defaults all along).
+
+**Milestone — first real YouTube end-to-end discussion:**
+
+- Synced `https://www.youtube.com/watch?v=jNQXAC9IVRw` ("Me at the zoo",
+  the first YouTube video, 19 s) via `POST /api/sync/url` (rev 1).
+- Discuss (6 frames): yt-dlp downloaded the video, FFmpeg extracted 6
+  frames at [0:00, 3, 6, 9, 12, 15], the model answered in 94.3 s.
+- The answer correctly described the scene (man in blue shirt/red jacket,
+  elephant enclosure behind a fence) and behavior per frame, separated
+  interpretation, and declined what the frames cannot establish (no audio
+  known — `transcript_used: false`, no captions on this video; identity;
+  the object in his hand). This is the original product use case working on
+  real YouTube content, entirely locally.
+- Note: the preflight's yt-dlp detection needed the same venv-aware fix
+  (`tool_version` used bare PATH); preflight now reports
+  `yt-dlp 2026.10.26` / `YouTube source — enabled`.
+
+**Status:** all RC/audit deferred verifications that required yt-dlp are now
+closed in code; the RC checklist's YouTube rows are verified against real
+YouTube. Remaining open: local STT evaluation (next capability sprint
+candidate), harness CSP externalization follow-through is done, Tampermonkey
+pause auto-sync fix verified by the user on real YouTube (pause now
+auto-syncs; SPA navigation re-sync verified).
+
+**Unverified / deferred:** caption fetch on a video that actually HAS
+captions (this one had none — STT would fill exactly that gap); real-site
+allowlist hosts beyond YouTube.

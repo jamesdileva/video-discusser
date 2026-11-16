@@ -11,7 +11,10 @@ Every media adapter funnels external tools through `run_command`.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
+import sys
+from pathlib import Path
 
 MAX_STDERR_CHARS = 4000
 
@@ -33,6 +36,21 @@ class CommandError(Exception):
         self.returncode = returncode
         self.stderr_tail = stderr_tail
         super().__init__(message)
+
+
+def find_ytdlp() -> str | None:
+    """Locate yt-dlp: PATH first, then the active interpreter's environment
+    (a venv-installed yt-dlp.exe is not on the system PATH)."""
+    found = shutil.which("yt-dlp")
+    if found:
+        return found
+    for candidate in (
+        Path(sys.prefix) / "Scripts" / "yt-dlp.exe",  # Windows venv
+        Path(sys.prefix) / "bin" / "yt-dlp",  # POSIX venv
+    ):
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 def stderr_tail(text: str | bytes | None, limit: int = MAX_STDERR_CHARS) -> str:

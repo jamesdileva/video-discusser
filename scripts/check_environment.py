@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import httpx  # noqa: E402
 
 from app import __version__  # noqa: E402
+from app.adapters.subprocess_utils import find_ytdlp  # noqa: E402
 from app.config import Settings  # noqa: E402
 
 OK, WARN, FAIL = "[ OK ]", "[WARN]", "[FAIL]"
@@ -151,7 +152,8 @@ def run_preflight() -> bool:
         report(FAIL, "ffprobe", "not found on PATH (ships with FFmpeg)", required=True)
 
     # --- yt-dlp (optional) --------------------------------------------------------
-    ytdlp_ver = tool_version("yt-dlp", ["--version"])
+    ytdlp_path = find_ytdlp()
+    ytdlp_ver = tool_version(ytdlp_path, ["--version"]) if ytdlp_path else None
     if ytdlp_ver:
         report(OK, "yt-dlp (optional)", ytdlp_ver)
     else:

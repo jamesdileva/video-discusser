@@ -20,7 +20,7 @@ from app.adapters.media_source import (
     ResolvedMedia,
     probe_media,
 )
-from app.adapters.subprocess_utils import CommandError, run_command
+from app.adapters.subprocess_utils import CommandError, find_ytdlp, run_command
 from app.config import Settings
 from app.services.youtube_url import YouTubeUrlError, parse_youtube_url
 
@@ -57,7 +57,7 @@ class YouTubeSource:
             raise MediaSourceError("invalid_url", exc.message) from exc
         video_id = request.video_id or parsed.video_id
 
-        ytdlp = shutil.which("yt-dlp")
+        ytdlp = find_ytdlp()
         if ytdlp is None:
             raise MediaSourceError(
                 "media_tool_missing",

@@ -27,7 +27,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.adapters.subprocess_utils import CommandError, run_command
+from app.adapters.subprocess_utils import CommandError, find_ytdlp, run_command
 from app.config import Settings
 
 LOGGER = logging.getLogger("app.transcripts")
@@ -243,7 +243,7 @@ def fetch_youtube_transcript(
     """Captions via yt-dlp (opt-in, yt-dlp required). None when the runtime
     lacks yt-dlp, captions are unavailable, or anything fails — always a
     graceful degradation to the frames-only workflow."""
-    ytdlp = shutil.which("yt-dlp")
+    ytdlp = find_ytdlp()
     if ytdlp is None:
         return [], ["yt-dlp is not installed — captions unavailable."]
     run = run or run_command
