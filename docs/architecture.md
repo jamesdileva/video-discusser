@@ -238,7 +238,7 @@ Never send arbitrary local paths to the browser. The API should expose an applic
 - `question: str` (trimmed, non-empty, bounded length)
 - `window_seconds: int | None` (defaults to configured window)
 - `max_frames: int | None` (clamped to configured maximum)
-- `include_audio_transcript: bool | None` (Sprint 18: transcript text — sidecar subtitles or captions, local metadata only — is included when available; `false` forces the frames-only workflow. Local speech-to-text is a separate, unevaluated future concern.)
+- `include_audio_transcript: bool | None` (Sprint 18: transcript text — sidecar subtitles, captions, or — when `STT_ENABLED=true` — local whisper.cpp speech-to-text of the window's audio — is included when available; `false` forces the frames-only workflow. STT is opt-in, entirely local, and attributes segments as `local speech-to-text` — a lower trust tier than captions.)
 - `focus_seconds: float | None` (Sprint 19: when set, sampling is re-centered on this moment — a symmetric, denser window of `focus_window_seconds` around it, clamped to the video; the frame cap still bounds the count. `None` keeps the pause-anchored backward window.)
 - `focus_window_seconds: int | None` (narrow window half-width basis for the focused plan; default from `FOCUS_WINDOW_SECONDS`)
 

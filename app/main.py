@@ -120,6 +120,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         cache_dir = settings.ensure_cache_dir()
+        frame_store.sweep_download_strays()
         loaded = frame_store.load_from_disk()
         LOGGER.info(
             "starting backend v%s env=%s host=%s port=%d cache=%s frames_restored=%d "

@@ -179,6 +179,30 @@ class FrameStore:
             loaded += len(records)
         return loaded
 
+    def sweep_download_strays(self, *, max_age_seconds: int = 3600) -> int:
+        """Delete stray files in `cache/downloads/` older than the grace
+        window: crash leftovers (downloads/STT audio are deleted after use,
+        so anything older than an hour is a stray), stale caption files,
+        etc. In-flow files are young by definition and never touched.
+        Returns files removed."""
+        downloads_dir = self._cache_root / "downloads"
+        if not downloads_dir.is_dir():
+            return 0
+        now = time.time()
+        removed = 0
+        for f in downloads_dir.iterdir():
+            if not f.is_file():
+                continue
+            try:
+                if now - f.stat().st_mtime > max_age_seconds:
+                    f.unlink(missing_ok=True)
+                    removed += 1
+            except OSError:
+                continue
+        if removed:
+            LOGGER.info("swept %d stray download file(s)", removed)
+        return removed
+
     def sweep(
         self,
         *,
@@ -294,8 +318,10 @@ def extract_frames(
     frames_dir.mkdir(parents=True, exist_ok=True)
 
     # Opportunistic policy sweep — age expiry, then size budget. Young
-    # (potentially in-flight) batches are never touched.
+    # (potentially in-flight) batches are never touched. Stray downloads
+    # (crash leftovers, stale caption files) share the grace window.
     store.sweep(max_bytes=settings.cache_max_bytes)
+    store.sweep_download_strays()
 
     meta_path = frames_dir / f"{cache_key}.json"
     if meta_path.is_file():

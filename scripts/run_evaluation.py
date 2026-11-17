@@ -165,6 +165,18 @@ CASES: list[Case] = [
         "transcript, so a correct answer proves transcript attribution.",
     ),
     Case(
+        id="stt-speech",
+        clip="eval_stt.mp4",
+        category="local speech-to-text",
+        question="What is being said in the video?",
+        anchor=5.0,
+        window=5,
+        max_frames=3,
+        any_of=["elephant", "largest land animal"],
+        note="Silent title-card clip with TTS speech, NO sidecar — a correct "
+        "answer proves local STT fills the no-captions gap.",
+    ),
+    Case(
         id="legal-caution",
         clip="eval_text.mp4",
         category="legal caution",
@@ -267,6 +279,45 @@ def generate_clips() -> None:
         shutil.copy(EVAL_DIR / "eval_text.mp4", transcript_clip)
         print("  [gen ] eval_transcript.mp4 (copy)")
 
+    # Sprint 18b/STT: a speech-bearing clip with NO sidecar — spoken content
+    # exists only in the audio, so the case proves local speech-to-text.
+    stt_wav = EVAL_DIR / "eval_stt_speech.wav"
+    stt_clip = EVAL_DIR / "eval_stt.mp4"
+    if not stt_wav.is_file():
+        tts_ps = (
+            "Add-Type -AssemblyName System.Speech; "
+            "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+            "$s.SetOutputToWaveFile('" + str(stt_wav).replace("\\", "/") + "'); "
+            "$s.Speak('The elephant is the largest land animal alive today.'); "
+            "$s.Dispose()"
+        )
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", tts_ps], check=True, timeout=120
+        )
+        print("  [gen ] eval_stt_speech.wav (TTS)")
+    if not stt_clip.is_file():
+        cmd = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=0x103060:size=640x360:duration=5:rate=10",
+            "-i",
+            str(stt_wav),
+            "-shortest",
+            "-c:v",
+            "libx264",
+            "-c:a",
+            "aac",
+            "-y",
+            str(stt_clip),
+        ]
+        subprocess.run(cmd, check=True, timeout=120)
+        print("  [gen ] eval_stt.mp4 (TTS audio + title-card video)")
+
 
 def ollama_snapshot() -> str:
     try:
@@ -284,6 +335,7 @@ def build_service() -> tuple[DiscussionService, ActiveVideoService, Settings]:
     so runs are reproducible regardless of local settings."""
     settings = Settings(
         local_media_dirs=[EVAL_DIR, REPO / "browser" / "fixtures"],
+        stt_enabled=True,
         _env_file=None,  # type: ignore[call-arg]
     )
     active = ActiveVideoService()

@@ -99,6 +99,17 @@ class Settings(BaseSettings):
     # Character budget for transcript text fed to the model per request
     # (earliest-first, bounded resources).
     max_transcript_chars: int = Field(default=12000, ge=0, le=200000)
+
+    # --- Local speech-to-text (Sprint 18b/STT, opt-in) ----------------------
+    # Master gate for the whisper.cpp transcription of the analysis window's
+    # audio, used ONLY when no transcript tier (sidecar/captions) applies.
+    # The CLI and model are separate downloads, never bundled (weights rule).
+    stt_enabled: bool = False
+    stt_cli_path: Path = Path("./downloads/whisper-cpp/Release/whisper-cli.exe")
+    stt_model_path: Path = Path("./downloads/whisper-models/ggml-base.en.bin")
+    # Safety cap on the audio span transcribed per request (bounds latency
+    # and disk); the analysis window is already ≤ analysis_window_seconds.
+    stt_max_audio_seconds: int = Field(default=600, ge=10, le=7200)
     # Sprint 19: narrow symmetric window for focused re-sampling around a
     # chosen moment (denser frames; the frame cap still bounds the count).
     focus_window_seconds: int = Field(default=30, ge=5, le=3600)

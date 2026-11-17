@@ -8,33 +8,34 @@
     "max_frame_dimension": 768,
     "jpeg_quality": 80
   },
-  "ran_at": "2026-11-13 20:10:06",
+  "ran_at": "2026-11-17 12:28:15",
   "results": [
     {
-      "id": "event-focused",
-      "category": "focused re-sampling accuracy",
-      "question": "Does a yellow sign with text appear? What does it say?",
-      "clip": "eval_event.mp4",
+      "id": "stt-speech",
+      "category": "local speech-to-text",
+      "question": "What is being said in the video?",
+      "clip": "eval_stt.mp4",
       "max_frames": 3,
-      "window_seconds": 2,
-      "note": "Sprint 19 measurement: the SAME sign the sparse event-missed case cannot see is found when sampling is focused on its moment. Requires focus_seconds=8.5 (focus_window=2) \u2014 passed via --focus.",
-      "answer": "Visible observations:\nIn the frame at 0:07, there is no visible content other than a solid gray background. In the frame at 0:08, a rectangular yellow shape containing black text appears centered on the screen. The text reads \"ALERT 42\".\n\nPossible interpretation:\nThe appearance of this specific formatted text suggests it is functioning as an alert, warning, or notification system component within the video feed.\n\nWhat cannot be established from these frames:\nWhether the yellow element is a physical sign in a real environment or a digital graphic overlay; the context of the location; or any associated audio or action taking place simultaneously.",
+      "window_seconds": 5,
+      "note": "Silent title-card clip with TTS speech, NO sidecar \u2014 a correct answer proves local STT fills the no-captions gap.",
+      "answer": "Visible observations:\nThe provided frames show solid dark blue rectangles with no discernible objects, scenery, or text overlays [0:00], [0:01], [0:03].\n\nPossible interpretation:\nThe transcript indicates that spoken content exists during this time interval [0:00-0:03]: \"The elephant is the largest land animal alive today.\" Because the visual frames are devoid of imagery, any specific scene related to elephants or animals cannot be confirmed from the images provided.\n\nWhat cannot be established from these frames:\nIt is impossible to verify if an elephant or other land animals were actually visible in the video based on the supplied still frames [0:00], [0:01], [0:03]. The frames contain no visual data regarding subjects, settings, or speakers.\n\nThis is commentary and research assistance, not legal advice.",
       "frames_used": [
-        7.5,
-        8.5
+        0.0,
+        1.789,
+        3.329
       ],
       "window": [
-        7.5,
-        9.5
+        0.0,
+        3.57898
       ],
-      "elapsed_seconds": 67.1,
+      "elapsed_seconds": 82.6,
       "model_id": "qwen3.5:4b",
       "snapshot_revision": 1,
       "revision_changed": false,
       "memory": "qwen3.5:4b    96f38c742e0a    2.7 GB    25%/75% CPU/GPU    8192       llamacpp    4 minutes from now",
       "error": null,
       "verdict": "PASS",
-      "matched": "alert 42"
+      "matched": "elephant"
     }
   ]
 }

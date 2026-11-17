@@ -1555,3 +1555,62 @@ bundled (model-weights rule).
 
 **Deferred to the integration sprint:** request-level opt-in flag, prompt
 addendum wording, eval cases (TTS fixture + real audio), UI attribution.
+
+## 2026-11-17 — Sprint 18b/STT: Local speech-to-text integration
+
+**Goal:** Wire the GO-decision whisper.cpp runtime into the discuss flow —
+filling the "no transcript — audio unknown" gap, opt-in, entirely local.
+
+**Plan & scope:** `app/services/stt.py` (windowed audio extraction via
+FFmpeg, whisper-cli runner, stdout parsing), config knobs
+(`STT_ENABLED`/`STT_CLI_PATH`/`STT_MODEL_PATH`/`STT_MAX_AUDIO_SECONDS`),
+discussion integration (STT only on the no-transcript path, inside the
+download lifetime), downloads stray sweep, eval `stt-speech` case.
+Deferred: language selection beyond English, speaker attribution, VAD
+pre-pass, UI styling of STT-sourced transcript blocks.
+
+**What was done:**
+
+- `app/services/stt.py` — `extract_window_audio` (FFmpeg `-ss/-t` windowed
+  16 kHz mono extraction, argument arrays, timeout, verified output) and
+  `transcribe` (whisper-cli subprocess, `shell=False` explicit, stdout
+  parsed into attributed `TranscriptSegment`s). Typed failures:
+  `stt_unavailable`/`stt_failed`/`stt_timeout`/`stt_audio_failed`.
+- `DiscussionService` — STT block runs inside the extraction try (BEFORE
+  the download-cleanup finally — the audio lives in the download; the first
+  draft ran it after cleanup and would have failed on YouTube videos: the
+  restructure was caught in review). Trigger: only when
+  `not transcript_segments and STT_ENABLED`; the transcript addendum and
+  `transcript_used`/count flow unchanged, so the model sees STT text as a
+  lower trust tier (`local speech-to-text` source attribution).
+- Downloads lifecycle (user's cleanup question) — `FrameStore
+  .sweep_download_strays()`: crash strays, stale caption files, and STT
+  audio in `cache/downloads/` older than 1 h are swept; wired at startup
+  and per extraction. YouTube/direct downloads were already
+  deleted-after-use (audit fix); this closes the remaining leak paths.
+- Evaluation — `stt-speech` case: TTS speech muxed over a title-card video
+  with NO sidecar, so spoken content exists only in the audio.
+
+**Verification (Sprint 18b gates):**
+
+- [x] Opt-in: `STT_ENABLED=false` default → zero audio processing (tested);
+  `true` → STT fires only on the no-transcript path.
+- [x] Entirely local — whisper-cli subprocess + FFmpeg, no network.
+- [x] Bounded — windowed extraction capped by the analysis window and
+  `STT_MAX_AUDIO_SECONDS`; CLI timeout explicit.
+- [x] Attribution — segments carry `local speech-to-text`; live eval answer
+  attributed spoken content to the transcript while keeping visual
+  observations frames-cited.
+- [x] Graceful degradation — whisper failures/silence degrade to
+  frames-only with warnings; never a discussion failure (tested).
+
+**Tests run:** `pytest` — 276 passed (266 prior + 10 net new). Live eval:
+`stt-speech` PASS (82.6 s total; STT itself ≈ 1–2 s for the window) — the
+answer attributed spoken content to the transcript ("The transcript
+indicates… 'The elephant is the largest land animal alive today'") and
+explicitly declined visual confirmation.
+
+**Unverified / deferred:** language selection beyond English; VAD pre-pass
+(whisper hallucination on silence is disclosed via warnings); UI styling of
+STT-sourced blocks; faster-whisper/whisper-server alternatives; Vulkan
+whisper build (CPU measured 12× realtime — unnecessary for this profile).
